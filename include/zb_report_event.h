@@ -18,6 +18,7 @@ enum report_events {
 	REPORT_BATTERY                      = BIT(4),
 #endif
 	REPORT_REQUEST_TIMING								= BIT(5),
+	REPORT_NEW_TIME_ADQUIRED						= BIT(6),
 };
 
 void report_event_post(uint32_t task);

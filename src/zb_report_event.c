@@ -11,6 +11,7 @@ LOG_MODULE_REGISTER(report_event, LOG_LEVEL_INF);
 #include "zb_zigbee.h"
 #include "zb_deep_sleep.h"
 #include "zb_radio.h"
+#include "zb_adc.h"
 
 #define REPORT_EVENT_TASK_STACK_SIZE   2048
 #define REPORT_EVENT_TASK_PRIORITY        5
@@ -41,6 +42,12 @@ static uint32_t report_in_event_mask(void)
 	return mask;
 }
 
+static uint32_t report_internal_event_mask(void)
+{
+	uint32_t mask = REPORT_NEW_TIME_ADQUIRED;
+	return mask;
+}
+
 static void report_event_task(void *p1, void *p2, void *p3)
 {
 	ARG_UNUSED(p1);
@@ -52,7 +59,8 @@ static void report_event_task(void *p1, void *p2, void *p3)
 	while (true) {
 		uint32_t mask_out = report_out_event_mask();
 		uint32_t mask_in  = report_in_event_mask();
-		uint32_t events = k_event_wait_safe(&report_events, mask_out | mask_in, false, K_FOREVER);
+		uint32_t mask_internal = report_internal_event_mask();
+		uint32_t events = k_event_wait_safe(&report_events, mask_out | mask_in | mask_internal, false, K_FOREVER);
 
 		if (!is_leaving_network() && ZB_JOINED()) {
 			zb_zcl_status_t status;
@@ -65,11 +73,21 @@ static void report_event_task(void *p1, void *p2, void *p3)
 					poweroff_mgr_zigbee_tx_done();
 				}
 			}
-			if (events & mask_out) {
+			if (events & mask_in) {
 				poweroff_mgr_zigbee_rx_begin();
 				status = radio_request_values(events);
 				if (status != ZB_ZCL_STATUS_SUCCESS) {
 					poweroff_mgr_zigbee_rx_done();
+				}
+			}
+			if (events & mask_internal) {
+				if (events & REPORT_NEW_TIME_ADQUIRED) {
+#ifdef FEATURE_MEASURE_BATTERY_LEVEL
+					LOG_DBG("Check if battery shall be measured");
+					if (check_shall_measure_battery()) {
+						fire_adc();
+					}
+#endif
 				}
 			}
 			#ifdef FEATURE_DEEP_SLEEP

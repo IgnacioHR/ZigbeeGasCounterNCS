@@ -35,7 +35,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #include "zb_main_button.h"
 #include "zb_zigbee.h"
 #include "zb_main_loop.h"
-#include "zb_save_counter.h"
+#include "zb_nvr.h"
 #include "zb_adc.h"
 #include "zb_wakeup_cause.h"
 #include "zb_report_event.h"
@@ -87,7 +87,7 @@ static bool reed_inactive_requires_radio(uint64_t *not_reported)
 	uint64_t current;
 	uint64_t last;
 
-	save_counter_wait_loaded(K_SECONDS(2));
+	nvr_wait_loaded(K_SECONDS(2));
 
 	current = get_current_summ();
 	last = retained_get_last_summation_sent();
@@ -138,14 +138,6 @@ static void check_shall_enable_radio(gm_wakeup_cause_t wakeup_cause)
 	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE) {
 		log_radio_not_needed_for_reed_inactive(not_reported);
 	}
-}
-
-static void check_shall_measure_battery(void)
-{
-	// TODO: in order to compute this action a mechanism to obtain a time reference is needed
-	#ifdef FEATURE_MEASURE_BATTERY_LEVEL
-		// main_loop_post(SHALL_MEASURE_BATTERY);
-	#endif
 }
 
 static bool is_reed_wakeup_cause(gm_wakeup_cause_t wakeup_cause)
@@ -227,10 +219,6 @@ int main(void)
 	// TODO, timer to reset instantaneous demand to 0
 #endif
 	check_shall_enable_radio(wakeup_cause);
-#ifdef FEATURE_MEASURE_BATTERY_LEVEL
-  LOG_DBG("Check if battery shall be measured");
-  check_shall_measure_battery();
-#endif
 	LOG_DBG("Zigbee Gas Counter started");
 
 	reed_led_off();

@@ -12,7 +12,7 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 #include "zb_ota.h"
 #include "zb_report_event.h"
 #include "zb_main_loop.h"
-#include "zb_save_counter.h"
+#include "zb_nvr.h"
 #include "zb_deep_sleep.h"
 
 #include <zboss_api.h>
@@ -39,6 +39,10 @@ atomic_t _is_leaving_network = ATOMIC_INIT(false);
 
 /* Zigbee device application context storage. */
 static gas_meter_device_ctx_t dev_ctx;
+
+static uint32_t last_zcl_time = 0;
+static int64_t last_sync_uptime_ms = 0;
+static uint32_t old_zcl_time = 0;
 
 /**
  * @brief ZCL_BASIC Cluster
@@ -228,49 +232,56 @@ static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(ota_attr_list, ZB_ZCL_O
  * 
  */
 static zb_zcl_cluster_desc_t gas_meter_cluster_list[] = {
-    ZB_ZCL_CLUSTER_DESC( \
-        ZB_ZCL_CLUSTER_ID_BASIC, \
-        ZB_ZCL_ARRAY_SIZE(basic_attr_list, zb_zcl_attr_t), \
-        (basic_attr_list), \
-        ZB_ZCL_CLUSTER_SERVER_ROLE, \
-        HW_MANUFACTURER_CODE \
+    ZB_ZCL_CLUSTER_DESC(
+        ZB_ZCL_CLUSTER_ID_BASIC,
+        ZB_ZCL_ARRAY_SIZE(basic_attr_list, zb_zcl_attr_t),
+        (basic_attr_list),
+        ZB_ZCL_CLUSTER_SERVER_ROLE,
+        HW_MANUFACTURER_CODE
     ),
-    ZB_ZCL_CLUSTER_DESC( \
-        ZB_ZCL_CLUSTER_ID_IDENTIFY, \
-        ZB_ZCL_ARRAY_SIZE(identify_attr_list, zb_zcl_attr_t), \
-        (identify_attr_list), \
-        ZB_ZCL_CLUSTER_SERVER_ROLE, \
-        HW_MANUFACTURER_CODE \
+    ZB_ZCL_CLUSTER_DESC(
+        ZB_ZCL_CLUSTER_ID_IDENTIFY,
+        ZB_ZCL_ARRAY_SIZE(identify_attr_list, zb_zcl_attr_t),
+        (identify_attr_list),
+        ZB_ZCL_CLUSTER_SERVER_ROLE,
+        HW_MANUFACTURER_CODE
     ),
-    ZB_ZCL_CLUSTER_DESC( \
-        ZB_ZCL_CLUSTER_ID_IDENTIFY, \
-        ZB_ZCL_ARRAY_SIZE(identify_client_attr_list, zb_zcl_attr_t), \
-        (identify_client_attr_list), \
-        ZB_ZCL_CLUSTER_CLIENT_ROLE, \
-        HW_MANUFACTURER_CODE \
+    ZB_ZCL_CLUSTER_DESC(
+        ZB_ZCL_CLUSTER_ID_IDENTIFY,
+        ZB_ZCL_ARRAY_SIZE(identify_client_attr_list, zb_zcl_attr_t),
+        (identify_client_attr_list),
+        ZB_ZCL_CLUSTER_CLIENT_ROLE,
+        HW_MANUFACTURER_CODE
     ),
-    ZB_ZCL_CLUSTER_DESC( \
-        ZB_ZCL_CLUSTER_ID_METERING, \
-        ZB_ZCL_ARRAY_SIZE(metering_attr_list, zb_zcl_attr_t), \
-        (metering_attr_list), \
-        ZB_ZCL_CLUSTER_SERVER_ROLE, \
-        HW_MANUFACTURER_CODE \
+    ZB_ZCL_CLUSTER_DESC(
+        ZB_ZCL_CLUSTER_ID_METERING,
+        ZB_ZCL_ARRAY_SIZE(metering_attr_list, zb_zcl_attr_t),
+        (metering_attr_list),
+        ZB_ZCL_CLUSTER_SERVER_ROLE,
+        HW_MANUFACTURER_CODE
     ),
 #ifdef FEATURE_MEASURE_BATTERY_LEVEL
-    ZB_ZCL_CLUSTER_DESC( \
-        ZB_ZCL_CLUSTER_ID_POWER_CONFIG, \
-        ZB_ZCL_ARRAY_SIZE(power_attr_list, zb_zcl_attr_t), \
-        (power_attr_list), \
-        ZB_ZCL_CLUSTER_SERVER_ROLE, \
-        HW_MANUFACTURER_CODE \
+    ZB_ZCL_CLUSTER_DESC(
+        ZB_ZCL_CLUSTER_ID_POWER_CONFIG,
+        ZB_ZCL_ARRAY_SIZE(power_attr_list, zb_zcl_attr_t),
+        (power_attr_list),
+        ZB_ZCL_CLUSTER_SERVER_ROLE,
+        HW_MANUFACTURER_CODE
     ),    
 #endif
-    ZB_ZCL_CLUSTER_DESC( \
-        ZB_ZCL_CLUSTER_ID_OTA_UPGRADE, \
-        ZB_ZCL_ARRAY_SIZE(ota_attr_list, zb_zcl_attr_t), \
-        (ota_attr_list), \
-        ZB_ZCL_CLUSTER_SERVER_ROLE, \
-        HW_MANUFACTURER_CODE \
+    ZB_ZCL_CLUSTER_DESC(
+        ZB_ZCL_CLUSTER_ID_OTA_UPGRADE,
+        ZB_ZCL_ARRAY_SIZE(ota_attr_list, zb_zcl_attr_t),
+        (ota_attr_list),
+        ZB_ZCL_CLUSTER_SERVER_ROLE,
+        HW_MANUFACTURER_CODE
+    ),
+    ZB_ZCL_CLUSTER_DESC(
+        ZB_ZCL_CLUSTER_ID_TIME,
+        0,
+        NULL,
+        ZB_ZCL_CLUSTER_CLIENT_ROLE,
+        HW_MANUFACTURER_CODE
     )
 };
 
@@ -317,6 +328,8 @@ static ZB_AF_SIMPLE_DESC_TYPE_EXPAND(GAS_METER_IN_CLUSTER_COUNT, GAS_METER_OUT_C
 
         ZB_ZCL_CLUSTER_ID_IDENTIFY,
         ZB_ZCL_CLUSTER_ID_OTA_UPGRADE,
+
+        ZB_ZCL_CLUSTER_ID_TIME,
     }
 };
 static ZBOSS_DEVICE_DECLARE_REPORTING_CTX_EXPAND(reporting_ctx, GAS_NUMBER_REPORTING_ATTRIBUTES);
@@ -405,13 +418,50 @@ void reset_device_status()
 }
 
 /**
- * @brief Set the initial valur of the current sum delivered. Used from NVS
+ * @brief Set the initial value of the current sum delivered. Used from NVS
  * 
  * @param value 
  */
 void set_init_current_summ(zb_uint48_t value)
 {
     dev_ctx.metering_attr.base.curr_summ_delivered = value;
+}
+
+/**
+ * @brief Used from the NVR subsystem when the last stored time is loaded
+ * 
+ * @param value 
+ */
+void set_init_old_time(uint32_t value)
+{
+    old_zcl_time = value;
+}
+
+/**
+ * @brief Access to the last timestamp stored in the nvr subsystem
+ * 
+ * @return uint32_t 
+ */
+uint32_t get_old_time(void)
+{
+    return old_zcl_time;
+}
+
+/**
+ * @brief Access to the current time in seconds since
+ *        2000-01-01T00:00:00 UTC (zcl time)
+ *        must be called after reception of the coordinator time
+ * 
+ * @return uint32_t seconds since 2000-01-01T00:00:00 UTC (zcl time)
+ * @return 0 in case the coordinator time is missing
+ */
+uint32_t get_current_time(void)
+{
+    if (last_zcl_time == 0)
+        return 0;
+    int64_t now = k_uptime_get();
+    int64_t elapsed = now - last_sync_uptime_ms;
+    return last_zcl_time + (elapsed / 1000);
 }
 
 /**
@@ -435,14 +485,14 @@ void zb_counter_increment(void)
         dev_ctx.metering_attr.base.curr_summ_delivered.high += 1;
     }
     report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
-    counter_schedule_save();
+    nvr_schedule_save();
 }
 
 static void zb_counter_set(zb_uint48_t value)
 {
     dev_ctx.metering_attr.base.curr_summ_delivered = value;
     report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
-    counter_schedule_save();
+    nvr_schedule_save();
 }
 
 /**
@@ -611,7 +661,7 @@ static void app_clusters_attr_set(void)
 		ZB_FALSE);
 #endif
 
-    save_counter_wait_loaded(K_SECONDS(2));
+    nvr_wait_loaded(K_SECONDS(2));
 	ZB_ZCL_SET_ATTRIBUTE(
 		GAS_METER_ENDPOINT,
 		ZB_ZCL_CLUSTER_ID_METERING,
@@ -955,7 +1005,7 @@ void zboss_signal_handler(zb_bufid_t bufid)
             LOG_INF("ZDO DEFAULT START - status: %d", status);
             break;
         case ZB_ZDO_SIGNAL_SKIP_STARTUP:
-            LOG_INF("Zigbee commissioning");
+            LOG_INF("Zigbee commissioning");            
 #ifdef FEATURE_DEEP_SLEEP
             poweroff_mgr_block_set(POF_BLOCK_USER_WINDOW);
 #endif
@@ -1022,6 +1072,7 @@ void zboss_signal_handler(zb_bufid_t bufid)
             break;
         case ZB_SIGNAL_JOIN_DONE:
             LOG_INF("Zigbee join done");
+            report_event_post(REPORT_REQUEST_TIMING);
             skip_default = true;
             break;
         case ZB_ZDO_DEVICE_UNAVAILABLE:
@@ -1049,23 +1100,101 @@ void zboss_signal_handler(zb_bufid_t bufid)
 	}
 }
 
+static bool handle_time_read_attr_response(zb_bufid_t bufid, const zb_zcl_parsed_hdr_t *cmd_info)
+{
+	zb_zcl_read_attr_res_t *attr_resp;
+	bool handled = false;
+
+	while (zb_buf_len(bufid) > 0) {
+		ZB_ZCL_GENERAL_GET_NEXT_READ_ATTR_RES(bufid, attr_resp);
+
+		if (attr_resp == NULL) {
+			LOG_WRN("Malformed Time Read Attributes Response");
+			break;
+		}
+
+		if (attr_resp->status != ZB_ZCL_STATUS_SUCCESS) {
+			LOG_WRN("Time attr 0x%04x read failed status=0x%02x",
+				attr_resp->attr_id,
+				attr_resp->status);
+			handled = true;
+			continue;
+		}
+
+		switch (attr_resp->attr_id) {
+		case ZB_ZCL_ATTR_TIME_TIME_STATUS_ID: {
+			uint8_t time_status;
+
+			if (attr_resp->attr_type != ZB_ZCL_ATTR_TYPE_8BITMAP) {
+				LOG_WRN("Unexpected TimeStatus type=0x%02x",
+					attr_resp->attr_type);
+				break;
+			}
+
+			time_status = attr_resp->attr_value[0];
+
+			LOG_DBG("TimeStatus=0x%02x", time_status);
+
+			handled = true;
+			break;
+		}
+
+		case ZB_ZCL_ATTR_TIME_TIME_ID: {
+			uint32_t zcl_time;
+
+			if (attr_resp->attr_type != ZB_ZCL_ATTR_TYPE_UTC_TIME) {
+				LOG_WRN("Unexpected Time type=0x%02x",
+					attr_resp->attr_type);
+				break;
+			}
+
+			memcpy(&zcl_time, attr_resp->attr_value, sizeof(zcl_time));
+
+			LOG_DBG("ZCL Time=%u", zcl_time);
+
+			last_zcl_time = zcl_time;
+			last_sync_uptime_ms = k_uptime_get();
+
+            report_event_post(REPORT_NEW_TIME_ADQUIRED);
+
+			handled = true;
+			break;
+		}
+
+		default:
+			LOG_INF("Unhandled Time attr 0x%04x type=0x%02x",
+				attr_resp->attr_id,
+				attr_resp->attr_type);
+			handled = true;
+			break;
+		}
+	}
+	return handled;
+}
+
 static zb_uint8_t zcl_endpoint_cb(zb_bufid_t bufid)
 {
 	zb_uint8_t *payload = zb_buf_begin(bufid);
 	zb_uint8_t len = zb_buf_len(bufid);
 
-	LOG_HEXDUMP_INF(payload, len, "Color payload");
-
 	zb_zcl_parsed_hdr_t cmd_info;
-
 	ZB_ZCL_COPY_PARSED_HEADER(bufid, &cmd_info);
 
-	LOG_INF("EP handler: ep=%u cluster=0x%04x cmd=0x%02x profile=0x%04x dir=%u",
-		cmd_info.addr_data.common_data.dst_endpoint,
-		cmd_info.cluster_id,
-		cmd_info.cmd_id,
-		cmd_info.profile_id,
-		cmd_info.cmd_direction);
+    if (cmd_info.cluster_id == ZB_ZCL_CLUSTER_ID_TIME && 
+        cmd_info.profile_id == ZB_AF_HA_PROFILE_ID &&
+        cmd_info.cmd_direction == ZB_ZCL_FRAME_DIRECTION_TO_CLI &&
+        cmd_info.cmd_id == ZB_ZCL_CMD_READ_ATTRIB_RESP &&
+        cmd_info.is_common_command) {
+            handle_time_read_attr_response(bufid, &cmd_info);
+    } else {
+        LOG_HEXDUMP_INF(payload, len, "zcl_endpoint_cb: ");
+        LOG_INF("EP handler: ep=%u cluster=0x%04x cmd=0x%02x profile=0x%04x dir=%u",
+            cmd_info.addr_data.common_data.dst_endpoint,
+            cmd_info.cluster_id,
+            cmd_info.cmd_id,
+            cmd_info.profile_id,
+            cmd_info.cmd_direction);
+    }
 
 	return ZB_FALSE;
 }
@@ -1105,6 +1234,8 @@ static void zb_task(void *p1, void *p2, void *p3)
     ZB_ZCL_SET_MODIFY_ATTR_VALUE_CB(modify_attr_cb);
     ZB_ZCL_SET_REPORT_ATTR_CB(report_attr_cb);
     ZB_AF_SET_ENDPOINT_HANDLER(GAS_METER_ENDPOINT, zcl_endpoint_cb);
+
+    zb_zcl_time_init_client();
 
 	zigbee_enable();
 }

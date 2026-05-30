@@ -20,7 +20,7 @@ target_sources(app PRIVATE
   src/zb_light_sleep.c
   src/zb_main_loop.c
   src/zb_report_event.c
-  src/zb_save_counter.c
+  src/zb_nvr.c
   src/zb_adc.c
   src/zb_wakeup_cause.c
   src/zb_retained.c

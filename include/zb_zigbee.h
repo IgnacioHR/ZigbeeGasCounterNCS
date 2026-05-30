@@ -44,11 +44,14 @@ void set_device_status_bit(zb_uint64_t bit);
 void clear_device_status_bit(zb_uint64_t bit);
 void reset_device_status();
 void set_init_current_summ(zb_uint48_t value);
+void set_init_old_time(uint32_t value);
 zb_uint64_t get_current_summ(void);
 void zb_counter_increment(void);
 bool is_zigbee_started(void);
 bool is_leaving_network(void);
 void leave_action(void);
+uint32_t get_current_time(void);
+uint32_t get_old_time(void);
 
 typedef struct {
     zb_zcl_basic_attrs_ext_t base;

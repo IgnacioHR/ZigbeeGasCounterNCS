@@ -3,30 +3,30 @@
 #include <zephyr/settings/settings.h>
 #include <zigbee/zigbee_app_utils.h>
 
-LOG_MODULE_REGISTER(save_counter, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(nvr, LOG_LEVEL_INF);
 
 #include <zephyr/logging/log_ctrl.h>
 
 #include "zb_features.h"
-#include "zb_save_counter.h"
+#include "zb_nvr.h"
 #include "zb_zigbee.h"
 #include "zb_reed.h"
 #include "zb_deep_sleep.h"
 
-#define SAVE_COUNTER_TASK_STACK_SIZE   2048
-#define SAVE_COUNTER_TASK_PRIORITY        5
+#define NVR_TASK_STACK_SIZE   2048
+#define NVR_TASK_PRIORITY        5
 
-static bool save_counter_started = false;
-static K_MUTEX_DEFINE(save_counter_mutex);
+static bool nvr_started = false;
+static K_MUTEX_DEFINE(nvr_mutex);
 
-#define GM_SETTINGS_COUNTER_KEY "gm/counter"
+#define GM_SETTINGS_COUNTER_KEY 		"gm/counter"
+#define GM_SETTINGS_TIME_KEY 				"gm/time"
 
 static struct gm_nvram_state {
 	struct k_sem loaded_sem;
 	struct k_mutex lock;
 	bool load_done;
 	int load_result;
-	// uint64_t counter_value;
 	bool counter_valid;
 } nvram = {
 	.loaded_sem = Z_SEM_INITIALIZER(nvram.loaded_sem, 0, 1),
@@ -47,42 +47,37 @@ static void gm_nvram_mark_loaded(int result)
 	k_sem_give(&nvram.loaded_sem);
 }
 
-static struct k_work_delayable save_counter_work;
+static struct k_work_delayable nvr_work;
 
-static void save_counter_work_handler(struct k_work *work)
+static void nvr_work_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
 	uint64_t to_save_count = get_current_summ();
+	uint32_t to_save_time = get_current_time();
 
 	int err = settings_save_one(GM_SETTINGS_COUNTER_KEY, &to_save_count, sizeof(to_save_count));
 	if (err == 0) {
 		LOG_INF("Counter value stored %lld", to_save_count);
-		reed_led_off();
-		poweroff_mgr_block_clear(POF_BLOCK_SAVE_NVS);
-		/*
-			* Equivalente conceptual a reprogramar deep sleep:
-			* aquí podrías reprogramar tu k_work_delayable de PM,
-			* heartbeat o entrada a System OFF.
-			*/
-		return;
+	} else {
+		LOG_ERR("Error saving counter to settings: %d", err);
+		set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
+		set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
 	}
-
-	LOG_ERR("Error saving counter to settings: %d", err);
-	set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
-	set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
-    // /*
-    //  * En vez de xEventGroupSetBits(...), en Zephyr normalmente:
-    //  * - marcas flags atómicos
-    //  * - haces submit de un work de reporting Zigbee
-    //  */
-
-    // atomic_or(&report_flags, REPORT_STATUS | REPORT_EXTENDED_STATUS);
-    // k_work_submit(&zigbee_report_work);	
-#ifdef FEATURE_DEEP_SLEEP
-	poweroff_mgr_block_clear(POF_BLOCK_SAVE_NVS);
-#endif
 	reed_led_off();
+	if (to_save_time > 0) {
+		err = settings_save_one(GM_SETTINGS_TIME_KEY, &to_save_time, sizeof(to_save_time));
+		if (err == 0) {
+			LOG_INF("Battery time stored %d", to_save_time);
+		} else {
+			LOG_ERR("Error saving coordinator time to settings: %d", err);
+			set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
+			set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
+		}
+	}
+	#ifdef FEATURE_DEEP_SLEEP
+		poweroff_mgr_block_clear(POF_BLOCK_SAVE_NVS);
+	#endif
 }
 
 static int counter_set_from_u64(uint64_t value)
@@ -94,6 +89,14 @@ static int counter_set_from_u64(uint64_t value)
 	set_init_current_summ(z_value);
 
 	LOG_INF("Counter value set to %lld",value);
+	return 0;
+}
+
+static int time_set_from_u32(uint32_t value)
+{
+	set_init_old_time(value);
+
+	LOG_INF("Time value set to %d",value);
 	return 0;
 }
 
@@ -120,7 +123,7 @@ static int counter_load_cb(const char *name, size_t len, settings_read_cb read_c
 	}
 
 	if (ret != sizeof(saved_count)) {
-		LOG_ERR("Short read from settings: %d", ret);
+		LOG_ERR("Short read of counter from settings: %d", ret);
 		return -EIO;
 	}
 
@@ -130,7 +133,40 @@ static int counter_load_cb(const char *name, size_t len, settings_read_cb read_c
 	return ret;
 }
 
-static int load_current_summ_from_nvs(void)
+static int time_load_cb(const char *name, size_t len, settings_read_cb read_cb, void* cb_arg, void *param)
+{
+	uint32_t saved_time;
+	bool *found = param;
+
+	ARG_UNUSED(name);
+
+	if (found != NULL) {
+		*found = true;
+	}
+
+	if (len != sizeof(saved_time)) {
+		LOG_ERR("Invalid stored time size: %zu", len);
+		return -EINVAL;
+	}
+	int ret = read_cb(cb_arg, &saved_time, sizeof(saved_time));
+
+	if (ret < 0) {
+		LOG_ERR("Error reading time from settings: %d", ret);
+		return ret;
+	}
+
+	if (ret != sizeof(saved_time)) {
+		LOG_ERR("Short read of time from settings: %d", ret);
+		return -EIO;
+	}
+
+	ret = time_set_from_u32(saved_time);
+	gm_nvram_mark_loaded(ret);
+
+	return ret;
+}
+
+static int load_current_summ_from_nvr(void)
 {
 	bool found = false;
 	int err = settings_load_subtree_direct(GM_SETTINGS_COUNTER_KEY, counter_load_cb, &found);
@@ -151,21 +187,40 @@ static int load_current_summ_from_nvs(void)
 	return 0;
 }
 
+static int load_current_time_from_nvr(void)
+{
+	bool found = false;
+	int err = settings_load_subtree_direct(GM_SETTINGS_TIME_KEY, time_load_cb, &found);
+
+	if (err != 0) {
+			LOG_ERR("Error loading time from settings: %d", err);
+			set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
+			set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
+			return err;
+	}
+
+	if (!found) {
+		LOG_INF("Time not found in memory");
+	}
+
+	return 0;
+}
+
 /**
  * @brief initializes tasks to save counter value to NVR and load counter value from NVR
  * 
  */
-static void save_counter_init(void)
+static void nvr_init(void)
 {
-	if (save_counter_started)
+	if (nvr_started)
 		return;
-	k_mutex_lock(&save_counter_mutex, K_FOREVER);
-	if (save_counter_started) {
-		k_mutex_unlock(&save_counter_mutex);
+	k_mutex_lock(&nvr_mutex, K_FOREVER);
+	if (nvr_started) {
+		k_mutex_unlock(&nvr_mutex);
 		return;
 	}
 	
-	k_work_init_delayable(&save_counter_work, save_counter_work_handler);
+	k_work_init_delayable(&nvr_work, nvr_work_handler);
 	log_filter_set(NULL, 0, log_source_id_get("fs_nvs"), LOG_LEVEL_WRN);
 	int	err = settings_subsys_init();
 	if (err != 0) {
@@ -174,13 +229,17 @@ static void save_counter_init(void)
 		set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
 		set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
 	} else {
-		err = load_current_summ_from_nvs();
+		err = load_current_summ_from_nvr();
 		if (err != 0) {
 			LOG_ERR("Error loading current sum from NVR (err: %d)", err);
 		}
+		err = load_current_time_from_nvr();
+		if (err != 0) {
+			LOG_ERR("Error loading current time from NVR (err: %d)", err);
+		}
 	}
-	save_counter_started = true;
-	k_mutex_unlock(&save_counter_mutex);
+	nvr_started = true;
+	k_mutex_unlock(&nvr_mutex);
 }
 
 /**
@@ -190,11 +249,11 @@ static void save_counter_init(void)
  * @param timeout 
  * @return int 
  */
-int save_counter_wait_loaded(k_timeout_t timeout)
+int nvr_wait_loaded(k_timeout_t timeout)
 {
 	int err;
 	int result;
-	save_counter_init();
+	nvr_init();
 	k_mutex_lock(&nvram.lock, K_FOREVER);
 	if (nvram.load_done) {
 		result = nvram.load_result;
@@ -216,8 +275,8 @@ int save_counter_wait_loaded(k_timeout_t timeout)
  * @brief Schedules a save of counter value to NVS as soon as possible
  * 
  */
-void counter_schedule_save(void)
+void nvr_schedule_save(void)
 {
 	poweroff_mgr_block_set(POF_BLOCK_SAVE_NVS);
-  k_work_reschedule(&save_counter_work, K_NO_WAIT);
+  k_work_reschedule(&nvr_work, K_NO_WAIT);
 }

@@ -3,6 +3,9 @@
 #ifndef ZB_ADC_H
 #define ZB_ADC_H
 
+#include "zb_features.h"
+
+#ifdef FEATURE_MEASURE_BATTERY_LEVEL
 // Vendor defined battery voltage
 #define RATED_BATTERY_VOLTAGE   3700
 // 1s maximum battery voltage, this will be translated to 200 for the battery percentage (represented as 100%)
@@ -17,5 +20,7 @@
 #define BATTERY_UNITS							 1
 
 void fire_adc(void);
+bool check_shall_measure_battery(void);
+#endif
 
 #endif // ZB_ADC_H

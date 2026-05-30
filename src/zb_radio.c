@@ -26,6 +26,8 @@ struct pending_report_ctx {
 	zb_uint8_t attr_type;
 };
 
+uint16_t num_time_servers_found = 0;
+
 struct report_result_event {
 	zb_uint8_t ep;
 	zb_uint16_t cluster_id;
@@ -421,24 +423,89 @@ zb_zcl_status_t radio_send_values(uint32_t events)
 	return status;
 }
 
+static void time_read_attr_send_cb(zb_uint8_t param)
+{
+	LOG_INF("Time Read Attributes request sent, param=%u", param);
+	if (param) {
+		zb_buf_free(param);
+	}
+	poweroff_mgr_zigbee_rx_done();
+}
+
+static void time_server_start_search_cb(zb_uint8_t param)
+{
+  zb_zdo_match_desc_resp_t *resp = (zb_zdo_match_desc_resp_t *)zb_buf_begin(param);
+  zb_uint8_t dst_endpoint;
+  zb_uint16_t short_addr;
+  zb_uint8_t *match_ep;
+  zb_apsde_data_indication_t *ind = ZB_BUF_GET_PARAM(param, zb_apsde_data_indication_t);
+  zb_uint8_t *cmd_ptr;
+
+  if (resp->status == ZB_ZDP_STATUS_SUCCESS && resp->match_len > 0)
+  {
+		num_time_servers_found++;
+		LOG_INF("Time server found cb and is OK");
+    /* Match EP list follows right after response header */
+    match_ep = (zb_uint8_t*)(resp + 1);
+
+    /* set EP value directly to attribute value */
+    /* we are searching for exact cluster, so only 1 EP maybe found */
+    dst_endpoint = *match_ep;
+    short_addr = ind->src_addr;
+    /* ZB_BUF_CLEAR_PARAM(ZB_BUF_FROM_REF(param)); */
+
+    /* Send Read time status and time attributes */
+		LOG_INF("Requesting time to short=%d", short_addr);
+
+    ZB_ZCL_GENERAL_INIT_READ_ATTR_REQ(param, cmd_ptr, ZB_ZCL_ENABLE_DEFAULT_RESPONSE);
+    ZB_ZCL_GENERAL_ADD_ID_READ_ATTR_REQ(cmd_ptr, (ZB_ZCL_ATTR_TIME_TIME_STATUS_ID));
+    ZB_ZCL_GENERAL_ADD_ID_READ_ATTR_REQ(cmd_ptr, (ZB_ZCL_ATTR_TIME_TIME_ID));
+    ZB_ZCL_GENERAL_SEND_READ_ATTR_REQ(
+        param, cmd_ptr, short_addr, ZB_APS_ADDR_MODE_16_ENDP_PRESENT, dst_endpoint, GAS_METER_ENDPOINT,
+         ZB_AF_HA_PROFILE_ID, (ZB_ZCL_CLUSTER_ID_TIME), time_read_attr_send_cb);
+  } else if (resp->status == ZB_ZDP_STATUS_TIMEOUT) {
+		if (num_time_servers_found == 0) {
+			poweroff_mgr_zigbee_rx_done();
+		}
+	} else {
+		LOG_ERR("Time server found cb ERROR (err: %d)",resp->status);
+    zb_buf_free(param);
+  }
+}
+
+static void time_server_start_search(zb_uint8_t param)
+{
+  zb_zdo_match_desc_param_t *req;
+
+  req = zb_buf_initial_alloc(param, sizeof(zb_zdo_match_desc_param_t) + (1) * sizeof(zb_uint16_t));
+
+  req->nwk_addr = ZB_NWK_BROADCAST_RX_ON_WHEN_IDLE;
+  req->addr_of_interest = ZB_NWK_BROADCAST_RX_ON_WHEN_IDLE;
+  req->profile_id = ZB_AF_HA_PROFILE_ID;
+  req->num_in_clusters = 1;
+  req->num_out_clusters = 0;
+  req->cluster_list[0] = ZB_ZCL_CLUSTER_ID_TIME;
+
+	LOG_INF("Broadcasting network for time servers...");
+	num_time_servers_found = 0;
+  zb_uint8_t seq = zb_zdo_match_desc_req(param, time_server_start_search_cb);
+	if (seq == 0xFF) {
+		LOG_ERR("zb_zdo_match_desc_req returned 0xFF");
+	}
+}
+
 zb_zcl_status_t radio_request_values(uint32_t events)
 {
 	zb_zcl_status_t status = ZB_ZCL_STATUS_SUCCESS;
-	// zb_ret_t ret;
-
-	// if (events & REPORT_REQUEST_TIMING) {
-	// 	zb_bufid_t bufid;
-
-	// 	bufid = zb_buf_get_out();
-	// 	if (!bufid) {
-	// 		LOG_ERR("No ZBOSS buffer for report");
-	// 		return -ENOBUFS;
-	// 	}
-
-
-
-	// 	// zb_zdo_match_desc_req()
-	// }
+	if (events & REPORT_REQUEST_TIMING) {
+		LOG_INF("Report Request Timing started");
+		zb_bufid_t bufid = zb_buf_get_out();
+		if (!bufid) {
+			LOG_ERR("No ZBOSS buffer for report");
+			return -ENOBUFS;
+		}
+		time_server_start_search(bufid);
+	}
 	return status;
 }
 

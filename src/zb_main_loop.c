@@ -41,8 +41,10 @@ static void main_loop_task(void *p1, void *p2, void *p3)
 		uint32_t events = k_event_wait_safe(&main_events, mask, false, K_FOREVER);
 
 		if (events & SHALL_ENABLE_ZIGBEE) {
-			LOG_INF("Start processing: SHALL_ENABLE_ZIGBEE event");
-			zigbee_start();
+			if (!is_zigbee_started()) {
+				LOG_INF("Start processing: SHALL_ENABLE_ZIGBEE event");
+				zigbee_start();
+			}
 		}
 #ifdef FEATURE_MEASURE_BATTERY_LEVEL
 		if (events & SHALL_MEASURE_BATTERY) {

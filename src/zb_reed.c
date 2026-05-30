@@ -11,7 +11,7 @@ LOG_MODULE_REGISTER(reed, LOG_LEVEL_INF);
 
 #include "zb_reed.h"
 #include "zb_retained.h"
-#include "zb_save_counter.h"
+#include "zb_nvr.h"
 #include "zb_main.h"
 #include "zb_zigbee.h"
 #include "zb_gpio_stable.h"
@@ -147,7 +147,7 @@ void check_counter_increment(void)
 	reed_thread_check_started();
 	if (reed_process_interrupt()) {
 		reed_led_on();
-		save_counter_wait_loaded(GM_NVRAM_WAIT_TIMEOUT);
+		nvr_wait_loaded(GM_NVRAM_WAIT_TIMEOUT);
 		zb_counter_increment();
 	}
 }
