@@ -4,11 +4,73 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 / {
-	chosen {
-		ncs,zigbee-timer = &timer2;
-	};
+
+    aliases {
+        main-button = &main_button;
+        reed-input = &reed_input;
+        batt-divider-en = &batt_divider_en;
+        watchdog0 = &wdt0;
+    };
+
+    app_gpios {
+        compatible = "gpio-keys";
+
+        main_button: main_button {
+            gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+            label = "Main button";
+        };
+
+        reed_input: reed_input {
+            gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+            label = "Gas reed input";
+        };
+    };
+
+    batt_divider_en: batt_divider_en {
+        gpios = <&gpio0 29 GPIO_ACTIVE_HIGH>;
+        label = "Battery divider enable";
+    };
+
+    zephyr,user {
+        io-channels = <&adc 4>; /* P0.28 = AIN4 = XIAO D2/A2 */
+    };
+
+    chosen {
+        zephyr,settings-partition = &storage_partition;
+    };
+
+    sram_retained: sram@2003ff00 {
+        compatible = "zephyr,memory-region", "mmio-sram";
+        reg = <0x2003ff00 0x100>;
+        zephyr,memory-region = "RetainedMem";
+        status = "okay";
+
+        retainedmem {
+            compatible = "zephyr,retained-ram";
+            status = "okay";
+            #address-cells = <1>;
+            #size-cells = <1>;
+
+            gm_retention: retention@0 {
+                compatible = "zephyr,retention";
+                reg = <0x0 0x100>;
+                status = "okay";
+                prefix = [47 4d]; /* "GM" */
+                checksum = <4>;
+            };
+        };
+    };
 };
 
-&timer2 {
-	status = "okay";
+&sram0 {
+    reg = <0x20000000 0x3ff00>;
+};
+
+&radio {
+    status = "okay";
+    zephyr,deferred-init;
+};
+
+&wdt0 {
+    status = "okay";
 };

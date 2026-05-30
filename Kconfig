@@ -1,0 +1,14 @@
+mainmenu "Zigbee Gas Counter"
+
+source "Kconfig.zephyr"
+
+menu "Gas counter application options"
+
+config GAS_DEVICE_INIT_PRIORITY
+
+	int "Wake capture init priority"
+	default 60
+	help
+	  Initialization priority for early gas counter wakeup capture.
+
+endmenu
