@@ -21,6 +21,7 @@
 
 void fire_adc(void);
 bool check_shall_measure_battery(void);
+int adc_gpio_init(void);
 #endif
 
 #endif // ZB_ADC_H

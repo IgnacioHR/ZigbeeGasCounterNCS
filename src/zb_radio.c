@@ -13,6 +13,7 @@ LOG_MODULE_REGISTER(radio, LOG_LEVEL_INF);
 #include "zb_report_event.h"
 #include "zb_zigbee.h"
 #include "zb_retained.h"
+#include "zb_nvr.h"
 #include "zb_deep_sleep.h"
 
 #define MAX_PENDING_REPORTS 8
@@ -52,6 +53,9 @@ static void report_result_work_handler(struct k_work *work)
 		if (ev.status == 0) {
 			if (ev.attr_id == ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID) {
 				retained_set_last_summation_sent(get_current_summ());
+			}
+			if (ev.attr_id == ZB_ZCL_ATTR_POWER_CONFIG_BATTERY_PERCENTAGE_REMAINING_ID) {
+				nvr_schedule_save();
 			}
 		}
 	}

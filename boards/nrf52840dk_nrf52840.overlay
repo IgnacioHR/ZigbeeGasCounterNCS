@@ -26,9 +26,13 @@
         };
     };
 
-    batt_divider_en: batt_divider_en {
-        gpios = <&gpio0 29 GPIO_ACTIVE_HIGH>;
-        label = "Battery divider enable";
+    gpio_outputs {
+        compatible = "gpio-leds";
+        
+        batt_divider_en: batt_divider_en {
+            gpios = <&gpio0 29 GPIO_ACTIVE_HIGH>;
+            label = "Battery divider enable";
+        };
     };
 
     zephyr,user {
@@ -73,4 +77,21 @@
 
 &wdt0 {
     status = "okay";
+};
+
+&adc {
+    status = "okay";
+
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    channel@4 {
+        reg = <4>;
+        zephyr,gain = "ADC_GAIN_1_6";
+        zephyr,reference = "ADC_REF_INTERNAL";
+        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 40)>;
+        zephyr,input-positive = <NRF_SAADC_AIN4>;
+        zephyr,resolution = <12>;
+        zephyr,oversampling = <4>;
+    };
 };

@@ -72,6 +72,9 @@ static int configure_gpio(void)
 	err = reed_gpio_init();
 	if (err < 0)
 		return err;
+	err = adc_gpio_init();
+	if (err < 0)
+		return err;
 	
 	return 0;
 }

@@ -29,6 +29,10 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 /* LED used for device identification. */
 #define IDENTIFY_LED                        DK_LED4
 
+#define M                       ((double)MAX_BATTERY_VOLTAGE / (double)ADC_MAX_VALUE)
+#define ADC_MIN_VALUE           (((double)MIN_BATTERY_VOLTAGE)/M)
+#define TO_PERCENTAGE           (double)(200.0 / ((double)ADC_MAX_VALUE - (double)ADC_MIN_VALUE))
+
 // #define RADIO_NODE DT_NODELABEL(radio)
 // static const struct device *radio = DEVICE_DT_GET(RADIO_NODE);
 
@@ -445,6 +449,52 @@ void set_init_old_time(uint32_t value)
 uint32_t get_old_time(void)
 {
     return old_zcl_time;
+}
+
+/**
+ * @brief Set the battery voltage mv and updates all power attributes
+ *        accordingly
+ * 
+ * @param voltage_mv 
+ */
+void set_battery_voltage_mv(int32_t voltage_mv)
+{
+    float bat_voltage_f = (float)(voltage_mv * (float)MAX_BATTERY_VOLTAGE / (float)ADC_MAX_VALUE);
+    dev_ctx.power_config_attr.battery_voltage = (uint8_t)(bat_voltage_f/100.0f+0.5f);
+    if (voltage_mv < ADC_MIN_VALUE) voltage_mv = ADC_MIN_VALUE;
+    uint8_t battery_percentage = (uint8_t)(((double)voltage_mv - ADC_MIN_VALUE)*TO_PERCENTAGE);
+    dev_ctx.power_config_attr.battery_percentage = battery_percentage;
+    int32_t shall_report = REPORT_BATTERY;
+    if (battery_percentage > 200) {
+        battery_percentage = 200;
+        dev_ctx.power_config_attr.battery_alarm_state |= ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_HIGH;
+    } else {
+        dev_ctx.power_config_attr.battery_alarm_state &= ~ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_HIGH;
+    }
+    if (dev_ctx.power_config_attr.battery_alarm_state & ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_UNAVAIL) {
+        // reset battery alarm state
+        dev_ctx.power_config_attr.battery_alarm_state &= ~ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_UNAVAIL;
+    }
+    if (voltage_mv < WARN_BATTERY_VOLTAGE) {
+        // BatteryVoltageMinThreshold or BatteryPercentageMinThreshold reached for Battery Source 1
+        dev_ctx.power_config_attr.battery_alarm_state |= ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_LOW; 
+    } else {
+        dev_ctx.power_config_attr.battery_alarm_state &= ~ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_LOW;
+    }
+    if (dev_ctx.power_config_attr.battery_alarm_state != 0 && (dev_ctx.metering_attr.base.status & ZB_ZCL_METERING_GAS_LOW_BATTERY) == 0) {
+        dev_ctx.metering_attr.base.status |= ZB_ZCL_METERING_GAS_LOW_BATTERY;
+        shall_report |= REPORT_STATUS;
+    } else if (dev_ctx.power_config_attr.battery_alarm_state == 0 && (dev_ctx.metering_attr.base.status & ZB_ZCL_METERING_GAS_LOW_BATTERY) != 0) {
+        dev_ctx.metering_attr.base.status &= ~ZB_ZCL_METERING_GAS_LOW_BATTERY;
+        shall_report |= REPORT_STATUS;
+    }
+    report_event_post(shall_report);
+}
+
+void set_battery_unavailable(void)
+{
+    dev_ctx.power_config_attr.battery_alarm_state |= ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_UNAVAIL;
+    report_event_post(REPORT_BATTERY);
 }
 
 /**
@@ -877,51 +927,17 @@ static void zcl_device_cb(zb_bufid_t bufid)
 		attr_id = device_cb_param->cb_param.
 			  set_attr_value_param.attr_id;
 
-		if (cluster_id == ZB_ZCL_CLUSTER_ID_ON_OFF) {
-			uint8_t value =
-				device_cb_param->cb_param.set_attr_value_param
-				.values.data8;
-
-			LOG_INF("on/off attribute setting to %hd", value);
-		} else if (cluster_id == ZB_ZCL_CLUSTER_ID_LEVEL_CONTROL) {
-			uint16_t value = device_cb_param->cb_param.
-					 set_attr_value_param.values.data16;
-
-			LOG_INF("level control attribute setting to %hd",
-				value);
-			// if (attr_id ==
-			//     ZB_ZCL_ATTR_LEVEL_CONTROL_CURRENT_LEVEL_ID) {
-			// 	level_control_set_value(value);
-			// }
-		// } else if (cluster_id == ZB_ZCL_CLUSTER_ID_COLOR_CONTROL) {
-		// 	uint16_t value = device_cb_param->cb_param.
-		// 		set_attr_value_param.values.data16;
-
-		// 	LOG_INF("color control attribute setting to %hd",
-		// 		value);
-		// 	if (attr_id == ZB_ZCL_ATTR_COLOR_CONTROL_CURRENT_X_ID) {
-		// 		color_control_set_x_value(value);
-		// 	} else if (attr_id == ZB_ZCL_ATTR_COLOR_CONTROL_CURRENT_Y_ID) {
-		// 		color_control_set_y_value(value);
-		// 	}
-		} else {
-			/* Other clusters can be processed here */
-			LOG_INF("Unhandled cluster attribute id: %d",
-				cluster_id);
-			device_cb_param->status = RET_NOT_IMPLEMENTED;
-		}
+        LOG_INF("Unhandled cluster attribute id: %d", cluster_id);
+        device_cb_param->status = RET_NOT_IMPLEMENTED;
 		break;
-
 	default:
-		// if (zcl_scenes_cb(bufid) == ZB_FALSE) {
-		// 	device_cb_param->status = RET_NOT_IMPLEMENTED;
-		// }
         LOG_INF("zcl_device_cb unhandled");
 		break;
 	}
 
 	LOG_INF("%s status: %hd", __func__, device_cb_param->status);
 }
+
 static void modify_attr_cb(zb_uint8_t endpoint,
                                zb_uint16_t cluster_id,
                                zb_uint16_t attr_id,

@@ -52,6 +52,8 @@ bool is_leaving_network(void);
 void leave_action(void);
 uint32_t get_current_time(void);
 uint32_t get_old_time(void);
+void set_battery_voltage_mv(int32_t voltage_mv);
+void set_battery_unavailable(void);
 
 typedef struct {
     zb_zcl_basic_attrs_ext_t base;
