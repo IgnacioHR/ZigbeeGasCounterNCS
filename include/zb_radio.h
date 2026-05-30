@@ -10,6 +10,6 @@
 zb_zcl_status_t radio_report_values(uint32_t events);
 zb_zcl_status_t radio_send_values(uint32_t events);
 void radio_report_ctx_init(void);
-void radio_request_values(uint32_t events);
+zb_zcl_status_t radio_request_values(uint32_t events);
 
 #endif

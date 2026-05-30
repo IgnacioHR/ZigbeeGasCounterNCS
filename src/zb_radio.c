@@ -421,7 +421,7 @@ zb_zcl_status_t radio_send_values(uint32_t events)
 	return status;
 }
 
-void radio_request_values(uint32_t events)
+zb_zcl_status_t radio_request_values(uint32_t events)
 {
 	zb_zcl_status_t status = ZB_ZCL_STATUS_SUCCESS;
 	// zb_ret_t ret;
