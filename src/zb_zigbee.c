@@ -29,9 +29,7 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 /* LED used for device identification. */
 #define IDENTIFY_LED                        DK_LED4
 
-#define M                       ((double)MAX_BATTERY_VOLTAGE / (double)ADC_MAX_VALUE)
-#define ADC_MIN_VALUE           (((double)MIN_BATTERY_VOLTAGE)/M)
-#define TO_PERCENTAGE           (double)(200.0 / ((double)ADC_MAX_VALUE - (double)ADC_MIN_VALUE))
+#define TO_PERCENTAGE           (double)(200.0 / ((double)MAX_BATTERY_VOLTAGE - (double)MIN_BATTERY_VOLTAGE))
 
 // #define RADIO_NODE DT_NODELABEL(radio)
 // static const struct device *radio = DEVICE_DT_GET(RADIO_NODE);
@@ -459,10 +457,13 @@ uint32_t get_old_time(void)
  */
 void set_battery_voltage_mv(int32_t voltage_mv)
 {
-    float bat_voltage_f = (float)(voltage_mv * (float)MAX_BATTERY_VOLTAGE / (float)ADC_MAX_VALUE);
-    dev_ctx.power_config_attr.battery_voltage = (uint8_t)(bat_voltage_f/100.0f+0.5f);
-    if (voltage_mv < ADC_MIN_VALUE) voltage_mv = ADC_MIN_VALUE;
-    uint8_t battery_percentage = (uint8_t)(((double)voltage_mv - ADC_MIN_VALUE)*TO_PERCENTAGE);
+    float bat_voltage_f = (float)(voltage_mv);
+    uint8_t voltage_8 = (uint8_t)(bat_voltage_f/100.0f+0.5f);
+    if (voltage_8 > 42u)
+        voltage_8 = 42u;
+    dev_ctx.power_config_attr.battery_voltage = voltage_8;
+    if (voltage_mv < MIN_BATTERY_VOLTAGE) voltage_mv = MIN_BATTERY_VOLTAGE;
+    uint8_t battery_percentage = (uint8_t)(((double)voltage_mv - MIN_BATTERY_VOLTAGE)*TO_PERCENTAGE);
     dev_ctx.power_config_attr.battery_percentage = battery_percentage;
     int32_t shall_report = REPORT_BATTERY;
     if (battery_percentage > 200) {

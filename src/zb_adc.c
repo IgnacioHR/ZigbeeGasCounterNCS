@@ -33,7 +33,7 @@ static const struct gpio_dt_spec batt_divider_en = GPIO_DT_SPEC_GET(BATT_DIVIDER
 static const struct adc_dt_spec batt_adc = ADC_DT_SPEC_GET(DT_PATH(zephyr_user));
 
 #define BATT_DIVIDER_R_TOP_OHM     100000LL
-#define BATT_DIVIDER_R_BOTTOM_OHM  337000LL
+#define BATT_DIVIDER_R_BOTTOM_OHM  380000LL
 
 /*
  * Tiempo para que el nodo ADC se estabilice tras activar los FET.
@@ -41,7 +41,7 @@ static const struct adc_dt_spec batt_adc = ADC_DT_SPEC_GET(DT_PATH(zephyr_user))
  * Si el divisor es de alta impedancia, el nodo ADC y el condensador de
  * muestreo del SAADC pueden necesitar más tiempo. Empieza conservador.
  */
-#define BATT_DIVIDER_SETTLE_TIME   K_MSEC(20)
+#define BATT_DIVIDER_SETTLE_TIME   K_MSEC(100)
 #define BATT_DIVIDER_NXWAIT_TIME   K_MSEC(2)
 
 /**

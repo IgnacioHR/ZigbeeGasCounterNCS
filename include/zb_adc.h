@@ -14,8 +14,6 @@
 #define MIN_BATTERY_VOLTAGE     3050
 // limit to set warning on low battery voltage, this is from battery readings, means 4200mv max value
 #define WARN_BATTERY_VOLTAGE    3150
-// The ADC conversion will return 3300mv when the battery voltage is 4200mv this is due to the voltage divider
-#define ADC_MAX_VALUE           3300
 // Number of batteries
 #define BATTERY_UNITS							 1
 
