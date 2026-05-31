@@ -32,8 +32,8 @@ static bool adc_started = false;
 static const struct gpio_dt_spec batt_divider_en = GPIO_DT_SPEC_GET(BATT_DIVIDER_EN_NODE, gpios);
 static const struct adc_dt_spec batt_adc = ADC_DT_SPEC_GET(DT_PATH(zephyr_user));
 
-#define BATT_DIVIDER_R_TOP_OHM     1000000LL
-#define BATT_DIVIDER_R_BOTTOM_OHM  1000000LL
+#define BATT_DIVIDER_R_TOP_OHM     100000LL
+#define BATT_DIVIDER_R_BOTTOM_OHM  337000LL
 
 /*
  * Tiempo para que el nodo ADC se estabilice tras activar los FET.
@@ -41,7 +41,8 @@ static const struct adc_dt_spec batt_adc = ADC_DT_SPEC_GET(DT_PATH(zephyr_user))
  * Si el divisor es de alta impedancia, el nodo ADC y el condensador de
  * muestreo del SAADC pueden necesitar más tiempo. Empieza conservador.
  */
-#define BATT_DIVIDER_SETTLE_TIME   K_MSEC(5)
+#define BATT_DIVIDER_SETTLE_TIME   K_MSEC(20)
+#define BATT_DIVIDER_NXWAIT_TIME   K_MSEC(2)
 
 /**
  * @brief evaluates if it is time to masure battery parameters
@@ -125,7 +126,8 @@ static int battery_adc_read_pin_mv(int32_t *adc_mv)
 static int battery_adc_read_mv(int32_t *battery_mv)
 {
 	int err;
-	int32_t adc_mv;
+	int32_t adc_mv1;
+	int32_t adc_mv2;
 	if (battery_mv == NULL) {
 		return -EINVAL;
 	}
@@ -135,7 +137,9 @@ static int battery_adc_read_mv(int32_t *battery_mv)
 		return err;
 	}
 	k_sleep(BATT_DIVIDER_SETTLE_TIME);
-	err = battery_adc_read_pin_mv(&adc_mv);
+	err = battery_adc_read_pin_mv(&adc_mv1);
+	k_sleep(BATT_DIVIDER_NXWAIT_TIME);
+	err = battery_adc_read_pin_mv(&adc_mv2);
 	/*
 	 * Muy importante: apagar el divisor incluso si falla la lectura.
 	 */
@@ -149,12 +153,11 @@ static int battery_adc_read_mv(int32_t *battery_mv)
 	if (err) {
 		return err;
 	}
-	int64_t scaled_mv = (int64_t)adc_mv *
+	int64_t scaled_mv = (int64_t)adc_mv2 *
 		(BATT_DIVIDER_R_TOP_OHM + BATT_DIVIDER_R_BOTTOM_OHM) /
 		BATT_DIVIDER_R_BOTTOM_OHM;
 	*battery_mv = (int32_t)scaled_mv;
-	LOG_INF("Battery voltage: adc=%d mV battery=%d mV",
-		adc_mv, *battery_mv);
+	LOG_INF("Battery voltage: adc=%d mV battery=%d mV", adc_mv2, *battery_mv);
 	return 0;
 }
 

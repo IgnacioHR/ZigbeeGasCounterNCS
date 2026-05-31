@@ -106,11 +106,11 @@ static bool reed_inactive_requires_radio(uint64_t *not_reported)
 	return false;
 }
 
-static void start_radio_and_report(void)
+static void start_radio_and_report(bool main_button)
 {
 	main_loop_post(SHALL_ENABLE_ZIGBEE);
 	report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
-	poweroff_mgr_user_window_extend(deep_sleep_eval_time_ms(true));
+	poweroff_mgr_user_window_extend(deep_sleep_eval_time_ms(main_button, !main_button));
 }
 
 static void log_radio_not_needed_for_reed_inactive(uint64_t not_reported)
@@ -134,7 +134,7 @@ static void check_shall_enable_radio(gm_wakeup_cause_t wakeup_cause)
 	}
 
 	if (enable_radio) {
-		start_radio_and_report();
+		start_radio_and_report(wakeup_cause == GM_WAKEUP_GPIO_MAIN_BTN_PRESS);
 		return;
 	}
 

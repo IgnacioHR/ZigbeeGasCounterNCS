@@ -20,7 +20,8 @@ LOG_MODULE_REGISTER(deep_sleep, LOG_LEVEL_INF);
 
 #define TIME_TO_SLEEP_ZIGBEE_ON_MS					1000
 #define TIME_TO_SLEEP_ZIGBEE_OFF_MS					50
-#define TIME_TO_SLEEP_ZIGBEE_STARTING_MS		60 * 1000
+#define TIME_TO_SLEEP_ZIGBEE_STARTING_MS		15 * 1000
+#define TIME_TO_SLEEP_USER_WAKE_UP					60 * 1000
 #define TIME_TO_SLEEP_BETWEEN_CYCLES		    10
 
 #define WDT_NODE DT_ALIAS(watchdog0)
@@ -76,10 +77,13 @@ static int deep_sleep_watchdog_init(uint32_t timeout_ms)
  * 
  * @return k_timeout_t 
  */
-int64_t deep_sleep_eval_time_ms(bool main_button_pressed)
+int64_t deep_sleep_eval_time_ms(bool main_button_pressed, bool other_startup)
 {
-	if (main_button_pressed) {
+	if (other_startup) {
 		return TIME_TO_SLEEP_ZIGBEE_STARTING_MS;
+	}
+	if (main_button_pressed) {
+		return TIME_TO_SLEEP_USER_WAKE_UP;
 	}
 	if (is_zigbee_started()) {
 		return TIME_TO_SLEEP_ZIGBEE_ON_MS;
@@ -159,6 +163,7 @@ static void poweroff_evaluate(bool *should_poweroff, int64_t *next_deadline, uin
 
 	if (zigbee_force_idle_after_ms != 0 &&
 	    now >= zigbee_force_idle_after_ms) {
+		LOG_INF("Force IDLE");
 		atomic_set(&zb_tx_pending, 0);
 		atomic_set(&zb_rx_pending, 0);
 		atomic_and(&blockers, ~(POF_BLOCK_ZIGBEE_TX |
@@ -167,11 +172,13 @@ static void poweroff_evaluate(bool *should_poweroff, int64_t *next_deadline, uin
 	}
 
 	if (user_window_until_ms != 0 && now >= user_window_until_ms) {
+		LOG_INF("User window expired");
 		user_window_until_ms = 0;
 		atomic_and(&blockers, ~POF_BLOCK_USER_WINDOW);
 	}
 
 	if (settings_sync_until_ms != 0 && now >= settings_sync_until_ms) {
+		LOG_INF("Settings expired");
 		settings_sync_until_ms = 0;
 		atomic_and(&blockers, ~POF_BLOCK_SETTINGS);
 	}
@@ -179,38 +186,45 @@ static void poweroff_evaluate(bool *should_poweroff, int64_t *next_deadline, uin
 	b = atomic_get(&blockers);
 
 	if (atomic_get(&zb_tx_pending) > 0) {
+		LOG_INF("Pending TX");
 		b |= POF_BLOCK_ZIGBEE_TX;
 	}
 
 	if (atomic_get(&zb_rx_pending) > 0) {
+		LOG_INF("Pending RX");
 		b |= POF_BLOCK_ZIGBEE_RX;
 	}
 
 	if (min_awake_until_ms != 0 && now < min_awake_until_ms) {
+		LOG_INF("Awake until %lld", min_awake_until_ms - now);
 		*next_deadline = min_awake_until_ms;
 		*active_blockers = b;
 		k_spin_unlock(&pof_lock, key);
 		return;
 	}
 	if (zigbee_quiet_until_ms != 0 && now < zigbee_quiet_until_ms) {
+		LOG_INF("Quiet until %lld", zigbee_quiet_until_ms - now);
 		*next_deadline = zigbee_quiet_until_ms;
 		*active_blockers = b;
 		k_spin_unlock(&pof_lock, key);
 		return;
 	}
 	if (user_window_until_ms != 0 && now < user_window_until_ms) {
+		LOG_INF("User window until %lld", user_window_until_ms - now);
 		*next_deadline = user_window_until_ms;
 		*active_blockers = b;
 		k_spin_unlock(&pof_lock, key);
 		return;
 	}
 	if (settings_sync_until_ms != 0 && now < settings_sync_until_ms) {
+		LOG_INF("Settings sync until %lld", settings_sync_until_ms - now);
 		*next_deadline = settings_sync_until_ms;
 		*active_blockers = b;
 		k_spin_unlock(&pof_lock, key);
 		return;
 	}
 	if (b != 0) {
+		LOG_INF("Other blocks");
 		if (zigbee_force_idle_after_ms != 0) {
 			*next_deadline = zigbee_force_idle_after_ms;
 			*active_blockers = b;
@@ -218,6 +232,7 @@ static void poweroff_evaluate(bool *should_poweroff, int64_t *next_deadline, uin
 		k_spin_unlock(&pof_lock, key);
 		return;
 	}
+	LOG_INF("Should poweroff=true");
 	*should_poweroff = true;
 	k_spin_unlock(&pof_lock, key);
 }
@@ -407,28 +422,70 @@ void poweroff_mgr_block_clear(uint32_t mask)
 	poweroff_mgr_touch();
 }
 
-void poweroff_mgr_user_window_extend(int32_t timeout_ms)
+/**
+ * @brief Opens a period of time where the device will not
+ * 				enter power off.
+ * 				If a window was already set, this function will
+ *        just set the new time.
+ * 
+ * @param timeout_ms 
+ */
+void poweroff_mgr_user_window_open(int32_t timeout_ms)
 {
 	int64_t deadline;
 
-	LOG_DBG("poweroff_mgr_user_window_extend called with timeoutms=%u", timeout_ms);
+	LOG_INF("user_window_open timeoutms=%d", timeout_ms);
 	k_spinlock_key_t key;
 	poweroff_mgr_ensure_policy_initialized();
 
 	deadline = now_ms() + timeout_ms;
 
 	key = k_spin_lock(&pof_lock);
-	if (deadline > user_window_until_ms) {
-		user_window_until_ms = deadline;
-	}
+	user_window_until_ms = deadline;
 	atomic_or(&blockers, POF_BLOCK_USER_WINDOW);
 	k_spin_unlock(&pof_lock, key);
 
 	poweroff_mgr_touch();
 }
 
+/**
+ * @brief Extends a period of time where the device will not
+ *        enter power off.
+ *        If a window was already set, this function will 
+ * 				check the remaining time in the window and will make sure
+ * 				the new window ends as far in the future as possible
+ * 
+ * @param timeout_ms 
+ */
+void poweroff_mgr_user_window_extend(int32_t timeout_ms)
+{
+	LOG_INF("user_window_extend %d", timeout_ms);
+
+	int64_t remaining;
+	k_spinlock_key_t key;
+	poweroff_mgr_ensure_policy_initialized();
+
+	key = k_spin_lock(&pof_lock);
+	remaining = user_window_until_ms - now_ms();
+	if (remaining < 0)
+		remaining = 0;
+	if (remaining < timeout_ms)
+		user_window_until_ms = now_ms() + timeout_ms;
+	atomic_or(&blockers, POF_BLOCK_USER_WINDOW);
+	k_spin_unlock(&pof_lock, key);
+
+	poweroff_mgr_touch();
+}
+
+/**
+ * @brief Clear any current period time where the device will
+ *        not enter power off.
+ * 
+ */
 void poweroff_mgr_user_window_close(void)
 {
+	LOG_INF("user_window_extend closed");
+
 	k_spinlock_key_t key;
 	poweroff_mgr_ensure_policy_initialized();
 

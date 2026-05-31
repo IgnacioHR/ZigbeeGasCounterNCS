@@ -16,13 +16,14 @@ enum pof_blocker {
 	POF_BLOCK_APP_NOT_READY	= BIT(7),
 };
 
-int64_t deep_sleep_eval_time_ms(bool main_button_pressed);
+int64_t deep_sleep_eval_time_ms(bool main_button_pressed, bool other_startup);
 
 void poweroff_mgr_enable_for_wakeup(gm_wakeup_cause_t reason);
 
 void poweroff_mgr_block_set(uint32_t mask);
 void poweroff_mgr_block_clear(uint32_t mask);
 
+void poweroff_mgr_user_window_open(int32_t timeout_ms);
 void poweroff_mgr_user_window_extend(int32_t timeout_ms);
 void poweroff_mgr_user_window_close(void);
 

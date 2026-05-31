@@ -91,7 +91,7 @@ static void report_event_task(void *p1, void *p2, void *p3)
 				}
 			}
 			#ifdef FEATURE_DEEP_SLEEP
-			poweroff_mgr_user_window_extend(deep_sleep_eval_time_ms(false));
+			poweroff_mgr_user_window_extend(deep_sleep_eval_time_ms(false, false));
 			#endif
 		} else {
 			LOG_ERR("Shall re-schedule same events for later, note, shall inform the zb_deep_sleep about it");

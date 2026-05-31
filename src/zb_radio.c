@@ -16,7 +16,7 @@ LOG_MODULE_REGISTER(radio, LOG_LEVEL_INF);
 #include "zb_nvr.h"
 #include "zb_deep_sleep.h"
 
-#define MAX_PENDING_REPORTS 8
+#define MAX_PENDING_REPORTS 12
 
 struct pending_report_ctx {
 	bool used;
@@ -220,6 +220,15 @@ static int pending_report_put(zb_bufid_t bufid, zb_uint8_t ep, zb_uint16_t clust
 	int ret = -ENOMEM;
 	k_mutex_lock(&pending_reports_lock, K_FOREVER);
 	for (size_t i = 0; i < ARRAY_SIZE(pending_reports); i++) {
+		if (pending_reports[i].used && 
+				pending_reports[i].ep == ep &&
+				pending_reports[i].cluster_id == cluster_id &&
+				pending_reports[i].attr_id == attr_id &&
+				pending_reports[i].attr_type == attr_type
+			) {
+				k_mutex_unlock(&pending_reports_lock);
+				return -EALREADY;
+			}
 		if (!pending_reports[i].used) {
 			pending_reports[i].used = true;
 			pending_reports[i].bufid = bufid;
@@ -248,10 +257,15 @@ static zb_ret_t radio_write_attr(zb_uint8_t ep, zb_uint16_t cluster_id, zb_uint1
 	}
 
 	int ret = pending_report_put(bufid, ep, cluster_id, attr_id, attr_type);
-	if (ret != 0) {
+	if (ret == -ENOMEM) {
 		LOG_ERR("No pending-report slot for bufid=%u", bufid);
 		zb_buf_free(bufid);
 		return ret;
+	}
+	if (ret == -EALREADY) {
+		LOG_WRN("Same write already exists");
+		zb_buf_free(bufid);
+		return RET_OK;
 	}
 
 	ptr = ZB_ZCL_START_PACKET(bufid);

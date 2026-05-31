@@ -1001,6 +1001,13 @@ void leave_action(void)
     }
 }
 
+// top level comissioning callback
+void bdb_start_top_level_commissioning_cb(uint8_t mode_mask)
+{
+    LOG_INF("On start top level commissioning callback...");
+    bdb_start_top_level_commissioning(mode_mask);
+}
+
 void zboss_signal_handler(zb_bufid_t bufid)
 {
     // LOG_INF("zboss_signal_handler");
@@ -1021,10 +1028,7 @@ void zboss_signal_handler(zb_bufid_t bufid)
             LOG_INF("ZDO DEFAULT START - status: %d", status);
             break;
         case ZB_ZDO_SIGNAL_SKIP_STARTUP:
-            LOG_INF("Zigbee commissioning");            
-#ifdef FEATURE_DEEP_SLEEP
-            poweroff_mgr_block_set(POF_BLOCK_USER_WINDOW);
-#endif
+            LOG_INF("Zigbee commissioning");
             break;
         case ZB_BDB_SIGNAL_DEVICE_FIRST_START:
         case ZB_BDB_SIGNAL_DEVICE_REBOOT:
@@ -1036,7 +1040,7 @@ void zboss_signal_handler(zb_bufid_t bufid)
                 if (zb_bdb_is_factory_new()) {
                     LOG_INF("Start network steering from factory new");
 #ifdef FEATURE_DEEP_SLEEP
-                    poweroff_mgr_block_set(POF_BLOCK_USER_WINDOW);
+                    poweroff_mgr_user_window_extend(10000);
 #endif
                 } else {
                     LOG_INF("Device rebooted");
@@ -1045,10 +1049,10 @@ void zboss_signal_handler(zb_bufid_t bufid)
                 LOG_INF("Deferred driver initialization successful");
             } else {
 #ifdef FEATURE_DEEP_SLEEP
-                poweroff_mgr_block_set(POF_BLOCK_USER_WINDOW);
+                poweroff_mgr_user_window_extend(10000);
 #endif
                 LOG_WRN("Failed with status: %d, retrying", status);
-                // zb_scheduler_alarm((esp_zb_callback_t)bdb_start_top_level_commissioning_cb, ESP_ZB_BDB_MODE_INITIALIZATION, 1000);
+                zb_schedule_app_alarm((zb_callback_t)bdb_start_top_level_commissioning_cb, ZB_BDB_INITIALIZATION, 1000);
             }
             break;
         case ZB_BDB_SIGNAL_STEERING:
@@ -1065,7 +1069,7 @@ void zboss_signal_handler(zb_bufid_t bufid)
                         zb_get_pan_id(), zb_get_current_channel(), zb_get_short_address());
             } else {
                 LOG_ERR("Network steering was not successful (status: %d)", status);
-                // esp_zb_scheduler_alarm((esp_zb_callback_t)bdb_start_top_level_commissioning_cb, ESP_ZB_BDB_MODE_NETWORK_STEERING, 1000);
+                zb_schedule_app_alarm((zb_callback_t)bdb_start_top_level_commissioning_cb, ZB_BDB_NETWORK_STEERING, 1000);
             }
             break;
         case ZB_ZDO_SIGNAL_LEAVE_INDICATION:
@@ -1075,20 +1079,20 @@ void zboss_signal_handler(zb_bufid_t bufid)
             LOG_INF("Signal leave received");
             zb_zdo_signal_leave_params_t *leave_params = (zb_zdo_signal_leave_params_t *)ZB_ZDO_SIGNAL_GET_PARAMS(sig_h, zb_zdo_signal_leave_params_t);
             if (leave_params && leave_params->leave_type == ZB_NWK_LEAVE_TYPE_RESET) {
-                // zb_nvram_erase_at_start(true);                                          // erase previous network information.
-                // zb_bdb_start_top_level_commissioning(ZB_BDB_MODE_NETWORK_STEERING); // steering a new network.
+                zb_nvram_erase();
+                bdb_start_top_level_commissioning(ZB_BDB_NETWORK_STEERING); // steering a new network.
             }
-            // leaving_network = false; // not needed as it is handled in the callback function
+//            atomic_set(_is_leaving_network, false);// not needed as it is handled in the callback function
             break;
         case ZB_ZDO_SIGNAL_PRODUCTION_CONFIG_READY:
             // zb_set_node_descriptor_manufacturer_code(manufacturer_code);
             break;
         case ZB_COMMON_SIGNAL_CAN_SLEEP:
-            // poweroff_mgr_block_clear(POF_BLOCK_USER_WINDOW);
             break;
         case ZB_SIGNAL_JOIN_DONE:
             LOG_INF("Zigbee join done");
             report_event_post(REPORT_REQUEST_TIMING);
+            poweroff_mgr_user_window_extend(10000);
             skip_default = true;
             break;
         case ZB_ZDO_DEVICE_UNAVAILABLE:
@@ -1098,6 +1102,7 @@ void zboss_signal_handler(zb_bufid_t bufid)
             LOG_WRN("Long address IEEE Address: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
                 unavail_params->long_addr[7], unavail_params->long_addr[6], unavail_params->long_addr[5], unavail_params->long_addr[4],
                 unavail_params->long_addr[3], unavail_params->long_addr[2], unavail_params->long_addr[1], unavail_params->long_addr[0]);
+            skip_default = true;
             break;
         default:
             LOG_INF("ZDO signal: %d, status: %d", sig, status);
@@ -1202,6 +1207,16 @@ static zb_uint8_t zcl_endpoint_cb(zb_bufid_t bufid)
         cmd_info.cmd_id == ZB_ZCL_CMD_READ_ATTRIB_RESP &&
         cmd_info.is_common_command) {
             handle_time_read_attr_response(bufid, &cmd_info);
+    } else if (cmd_info.cluster_id == ZB_ZCL_CLUSTER_ID_METERING && 
+        cmd_info.profile_id == ZB_AF_HA_PROFILE_ID &&
+        cmd_info.cmd_direction == ZB_ZCL_FRAME_DIRECTION_TO_CLI &&
+        cmd_info.cmd_id == ZB_ZCL_CMD_DEFAULT_RESP &&
+        cmd_info.is_common_command) {
+            zb_zcl_default_resp_payload_t *res = ZB_ZCL_READ_DEFAULT_RESP(bufid);
+            if (res->command_id == ZB_ZCL_CMD_REPORT_ATTRIB &&
+                res->status == ZB_ZCL_STATUS_SUCCESS) {
+                    LOG_DBG("Metering report accepted");
+                }
     } else {
         LOG_HEXDUMP_INF(payload, len, "zcl_endpoint_cb: ");
         LOG_INF("EP handler: ep=%u cluster=0x%04x cmd=0x%02x profile=0x%04x dir=%u",
@@ -1321,4 +1336,7 @@ void zigbee_start(void)
     k_thread_start(zigbee_tid);
     zigbee_started = true;
     k_mutex_unlock(&zigbee_mutex);
+#ifdef FEATURE_DEEP_SLEEP
+    poweroff_mgr_user_window_open(10000);
+#endif
 }

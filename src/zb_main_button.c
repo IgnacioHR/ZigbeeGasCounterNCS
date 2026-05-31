@@ -454,7 +454,7 @@ static void btn_task(void *p1, void *p2, void *p3)
 			gpio_pin_set_dt(&led_main_button, 1);
 			main_loop_post(SHALL_ENABLE_ZIGBEE);
 #ifdef FEATURE_DEEP_SLEEP
-			poweroff_mgr_user_window_extend(deep_sleep_eval_time_ms(true));
+			poweroff_mgr_user_window_extend(deep_sleep_eval_time_ms(true, false));
 #endif
 			break;
 		case RELEASE:
