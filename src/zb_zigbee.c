@@ -9,7 +9,6 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 #include "zb_zigbee.h"
 #include "zb_version.h"
 #include "zb_adc.h"
-#include "zb_ota.h"
 #include "zb_report_event.h"
 #include "zb_main_loop.h"
 #include "zb_nvr.h"
@@ -18,8 +17,10 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 #include <zboss_api.h>
 #include <zigbee/zigbee_error_handler.h>
 #include <zigbee/zigbee_app_utils.h>
+#include <zigbee/zigbee_fota.h>
 #include <zb_nrf_platform.h>
 #include <zephyr/logging/log_ctrl.h>
+#include <zephyr/sys/reboot.h>
 
 #define ZIGBEE_TASK_STACK_SIZE              10240
 #define ZIGBEE_TASK_PRIORITY                   10
@@ -218,18 +219,6 @@ static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(metering_attr_list, ZB_
 #endif
 
 /**
- * @brief ZB_ZCL_OTA_UPGRADE Cluster
- * 
- */
-static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(ota_attr_list, ZB_ZCL_OTA_UPGRADE) \
-    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_OTA_UPGRADE_FILE_VERSION_ID, (&dev_ctx.ota_attr.ota_upgrade_file_version)) \
-    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_OTA_UPGRADE_MANUFACTURE_ID, (&dev_ctx.ota_attr.ota_upgrade_manufacturer)) \
-    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_OTA_UPGRADE_IMAGE_TYPE_ID, (&dev_ctx.ota_attr.ota_upgrade_image_type)) \
-    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_OTA_UPGRADE_STACK_VERSION_ID, (&dev_ctx.ota_attr.stack_version)) \
-    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_OTA_UPGRADE_CLIENT_DATA_ID, (&dev_ctx.ota_attr.client_data)) \
-    ZB_ZCL_FINISH_DECLARE_ATTRIB_LIST;
-
-/**
  * @brief Cluster list
  * 
  */
@@ -272,13 +261,6 @@ static zb_zcl_cluster_desc_t gas_meter_cluster_list[] = {
     ),    
 #endif
     ZB_ZCL_CLUSTER_DESC(
-        ZB_ZCL_CLUSTER_ID_OTA_UPGRADE,
-        ZB_ZCL_ARRAY_SIZE(ota_attr_list, zb_zcl_attr_t),
-        (ota_attr_list),
-        ZB_ZCL_CLUSTER_SERVER_ROLE,
-        HW_MANUFACTURER_CODE
-    ),
-    ZB_ZCL_CLUSTER_DESC(
         ZB_ZCL_CLUSTER_ID_TIME,
         0,
         NULL,
@@ -305,12 +287,12 @@ BUILD_ASSERT(
 #define ZBOSS_DEVICE_DECLARE_REPORTING_CTX_EXPAND(rep_ctx, in_count) \
     ZBOSS_DEVICE_DECLARE_REPORTING_CTX(rep_ctx, in_count)
 
-#define GAS_METER_OUT_CLUSTER_COUNT 3
+#define GAS_METER_IN_CLUSTER_COUNT 4
 
 #ifdef FEATURE_MEASURE_BATTERY_LEVEL
-#define GAS_METER_IN_CLUSTER_COUNT 4
+#define GAS_METER_OUT_CLUSTER_COUNT 2
 #else
-#define GAS_METER_IN_CLUSTER_COUNT 3
+#define GAS_METER_OUT_CLUSTER_COUNT 1
 #endif
 
 ZB_DECLARE_SIMPLE_DESC_EXPAND(GAS_METER_IN_CLUSTER_COUNT, GAS_METER_OUT_CLUSTER_COUNT);
@@ -329,7 +311,7 @@ static ZB_AF_SIMPLE_DESC_TYPE_EXPAND(GAS_METER_IN_CLUSTER_COUNT, GAS_METER_OUT_C
         ZB_ZCL_CLUSTER_ID_POWER_CONFIG,
 
         ZB_ZCL_CLUSTER_ID_IDENTIFY,
-        ZB_ZCL_CLUSTER_ID_OTA_UPGRADE,
+        // ZB_ZCL_CLUSTER_ID_OTA_UPGRADE,
 
         ZB_ZCL_CLUSTER_ID_TIME,
     }
@@ -350,7 +332,10 @@ static ZB_AF_DECLARE_ENDPOINT_DESC(
     0, 
     cvc_alarm_info_gas_meter);
 
-static ZBOSS_DECLARE_DEVICE_CTX_1_EP(gas_meter_ctx, ep_gas_meter);
+extern zb_af_endpoint_desc_t zigbee_fota_client_ep;
+static ZBOSS_DECLARE_DEVICE_CTX_2_EP(gas_meter_ctx, 
+    zigbee_fota_client_ep,
+    ep_gas_meter);
 
 gas_meter_device_ctx_t *get_dev_ctx_ptr(void)
 {
@@ -634,13 +619,13 @@ void app_device_ctx_init(void)
     dev_ctx.metering_attr.demand_formatting = ZB_ZCL_METERING_FORMATTING_SET(true, 2, 3);
 #endif
 
-    dev_ctx.ota_attr.ota_upgrade_file_version = OTA_FILE_VERSION;
-    dev_ctx.ota_attr.ota_upgrade_manufacturer = HW_MANUFACTURER_CODE;
-    dev_ctx.ota_attr.ota_upgrade_image_type = OTA_UPGRADE_IMAGE_TYPE;
-    dev_ctx.ota_attr.stack_version = STACK_VERSION;
-    dev_ctx.ota_attr.client_data.timer_query = ZB_ZCL_OTA_UPGRADE_QUERY_TIMER_COUNT_DEF;
-    dev_ctx.ota_attr.client_data.hw_version = OTA_UPGRADE_HW_VERSION;
-    dev_ctx.ota_attr.client_data.max_data_size = OTA_UPGRADE_MAX_DATA_SIZE;
+    // dev_ctx.ota_attr.ota_upgrade_file_version = OTA_FILE_VERSION;
+    // dev_ctx.ota_attr.ota_upgrade_manufacturer = HW_MANUFACTURER_CODE;
+    // dev_ctx.ota_attr.ota_upgrade_image_type = OTA_UPGRADE_IMAGE_TYPE;
+    // dev_ctx.ota_attr.stack_version = STACK_VERSION;
+    // dev_ctx.ota_attr.client_data.timer_query = ZB_ZCL_OTA_UPGRADE_QUERY_TIMER_COUNT_DEF;
+    // dev_ctx.ota_attr.client_data.hw_version = OTA_UPGRADE_HW_VERSION;
+    // dev_ctx.ota_attr.client_data.max_data_size = OTA_UPGRADE_MAX_DATA_SIZE;
 }
 
 static void app_clusters_attr_set(void)
@@ -1009,6 +994,41 @@ void bdb_start_top_level_commissioning_cb(uint8_t mode_mask)
     bdb_start_top_level_commissioning(mode_mask);
 }
 
+static void fota_evt_handler(const struct zigbee_fota_evt *evt)
+{
+	switch (evt->id) {
+	case ZIGBEE_FOTA_EVT_PROGRESS:
+		LOG_INF("Zigbee FOTA progress");
+        poweroff_mgr_block_set(POF_BLOCK_OTA);
+		break;
+	case ZIGBEE_FOTA_EVT_FINISHED:
+		poweroff_mgr_block_clear(POF_BLOCK_OTA);
+		LOG_INF("Zigbee FOTA finished, reboot required");
+        log_panic();
+        k_sleep(K_MSEC(100));
+	    sys_reboot(SYS_REBOOT_COLD);
+		break;
+	case ZIGBEE_FOTA_EVT_ERROR:
+		LOG_ERR("Zigbee FOTA error");
+        poweroff_mgr_block_clear(POF_BLOCK_OTA);
+		break;
+	default:
+		LOG_WRN("Unknown Zigbee FOTA evt=%d", evt->id);
+		break;
+	}
+}
+
+static int app_zigbee_fota_init(void)
+{
+	int err;
+	err = zigbee_fota_init(fota_evt_handler);
+	if (err) {
+		LOG_ERR("zigbee_fota_init failed: %d", err);
+		return err;
+	}
+	return 0;
+}
+
 void zboss_signal_handler(zb_bufid_t bufid)
 {
     // LOG_INF("zboss_signal_handler");
@@ -1114,6 +1134,8 @@ void zboss_signal_handler(zb_bufid_t bufid)
 	    ZB_ERROR_CHECK(zigbee_default_signal_handler(bufid));
     }
 
+    zigbee_fota_signal_handler(bufid);
+
 	/* All callbacks should either reuse or free passed buffers.
 	 * If bufid == 0, the buffer is invalid (not passed).
 	 */
@@ -1201,23 +1223,33 @@ static zb_uint8_t zcl_endpoint_cb(zb_bufid_t bufid)
 
 	zb_zcl_parsed_hdr_t cmd_info;
 	ZB_ZCL_COPY_PARSED_HEADER(bufid, &cmd_info);
+    zb_zcl_device_callback_param_t *device_cb_param = ZB_BUF_GET_PARAM(bufid, zb_zcl_device_callback_param_t);
 
     if (cmd_info.cluster_id == ZB_ZCL_CLUSTER_ID_TIME && 
         cmd_info.profile_id == ZB_AF_HA_PROFILE_ID &&
         cmd_info.cmd_direction == ZB_ZCL_FRAME_DIRECTION_TO_CLI &&
         cmd_info.cmd_id == ZB_ZCL_CMD_READ_ATTRIB_RESP &&
-        cmd_info.is_common_command) {
-            handle_time_read_attr_response(bufid, &cmd_info);
-    } else if (cmd_info.cluster_id == ZB_ZCL_CLUSTER_ID_METERING && 
+        cmd_info.is_common_command
+    ) {
+        handle_time_read_attr_response(bufid, &cmd_info);
+    } else if (
+        cmd_info.cluster_id == ZB_ZCL_CLUSTER_ID_METERING && 
         cmd_info.profile_id == ZB_AF_HA_PROFILE_ID &&
         cmd_info.cmd_direction == ZB_ZCL_FRAME_DIRECTION_TO_CLI &&
         cmd_info.cmd_id == ZB_ZCL_CMD_DEFAULT_RESP &&
-        cmd_info.is_common_command) {
-            zb_zcl_default_resp_payload_t *res = ZB_ZCL_READ_DEFAULT_RESP(bufid);
-            if (res->command_id == ZB_ZCL_CMD_REPORT_ATTRIB &&
-                res->status == ZB_ZCL_STATUS_SUCCESS) {
-                    LOG_DBG("Metering report accepted");
-                }
+        cmd_info.is_common_command
+    ) {
+        zb_zcl_default_resp_payload_t *res = ZB_ZCL_READ_DEFAULT_RESP(bufid);
+        if (res->command_id == ZB_ZCL_CMD_REPORT_ATTRIB &&
+            res->status == ZB_ZCL_STATUS_SUCCESS
+        ) {
+            LOG_DBG("Metering report accepted");
+        }
+    } else if (
+        cmd_info.cluster_id == ZB_ZCL_CLUSTER_ID_OTA_UPGRADE &&
+        device_cb_param->device_cb_id == ZB_ZCL_OTA_UPGRADE_VALUE_CB_ID
+    ) {
+        zigbee_fota_zcl_cb(bufid);
     } else {
         LOG_HEXDUMP_INF(payload, len, "zcl_endpoint_cb: ");
         LOG_INF("EP handler: ep=%u cluster=0x%04x cmd=0x%02x profile=0x%04x dir=%u",
@@ -1246,15 +1278,20 @@ static void zb_task(void *p1, void *p2, void *p3)
     // }
     LOG_INF("Configuring zigbee device");
 
+    app_zigbee_fota_init();
+
 	/* Register device context (endpoints). */
 	ZB_AF_REGISTER_DEVICE_CTX(&gas_meter_ctx);
 
-    #ifdef FEATURE_LIGHT_SLEEP
+#ifdef FEATURE_LIGHT_SLEEP
     // zb_sleep_enable(true);
     zb_set_rx_on_when_idle(true);
     zb_sleep_set_threshold(50);
     // sleep_enable_gpio_wakeup();
-    #endif
+#endif
+#ifdef FEATURE_DEEP_SLEEP
+    zb_set_rx_on_when_idle(false);
+#endif
 
 	app_clusters_attr_set();
     app_configure_reporting();

@@ -54,6 +54,9 @@ typedef enum ButtonState_e {
     RELEASE,
     SINGLE_CLICK,
     DOUBLE_CLICK,
+		TRIPLE_CLICK,
+		CUADRUPLE_CLICK,
+		QUINTUPLE_CLICK,
     UNKNOWN_CLICK,
     HOLD
 } button_state_msg_t;
@@ -250,9 +253,9 @@ static K_MUTEX_DEFINE(btn_notify_mutex);
  * @brief changes the internal button state and fires message to the queue
  * 
  * @param state new state to assign
- * @return enum ButtonState_e same state assigned, for convenience, see usage
+ * @return button_state_msg_t same state assigned, for convenience, see usage
  */
-static enum ButtonState_e btn_notify_state(enum ButtonState_e state)
+static button_state_msg_t btn_notify_state(button_state_msg_t state)
 {
 	button_state_msg_t msg = (button_state_msg_t)state;
 	k_mutex_lock(&btn_notify_mutex, K_FOREVER);
@@ -277,10 +280,16 @@ static enum ButtonState_e btn_notify_state(enum ButtonState_e state)
 static void timer_since_press_cb(struct k_work *work)
 {
 	ARG_UNUSED(work);
-	enum ButtonState_e state =
-    (enum ButtonState_e)atomic_get(&button_state);
+	button_state_msg_t state = (button_state_msg_t)atomic_get(&button_state);
 
-	if (state == SINGLE_CLICK || state == DOUBLE_CLICK || state == UNKNOWN_CLICK) {
+	if (
+		state == SINGLE_CLICK || 
+		state == DOUBLE_CLICK || 
+		state == TRIPLE_CLICK || 
+		state == CUADRUPLE_CLICK || 
+		state == QUINTUPLE_CLICK || 
+		state == UNKNOWN_CLICK
+	) {
 		btn_notify_state(UNKNOWN_CLICK);
 	}
 }
@@ -295,8 +304,7 @@ static K_WORK_DELAYABLE_DEFINE(work_since_press, timer_since_press_cb);
 static void timer_since_press_detect_hold_cb(struct k_work *work)
 {
 	ARG_UNUSED(work);
-	enum ButtonState_e state =
-    (enum ButtonState_e)atomic_get(&button_state);
+	button_state_msg_t state = (button_state_msg_t)atomic_get(&button_state);
 	if (state == PRESS)
 		btn_notify_state(HOLD);
 }
@@ -312,10 +320,15 @@ static K_WORK_DELAYABLE_DEFINE(work_detect_hold, timer_since_press_detect_hold_c
 static void timer_since_release_cb(struct k_work *work)
 {
 	ARG_UNUSED(work);
-	enum ButtonState_e state =
-    (enum ButtonState_e)atomic_get(&button_state);
-	bool single_or_double_or_unknown_click = state == SINGLE_CLICK || state == DOUBLE_CLICK || state == UNKNOWN_CLICK;
-	if (single_or_double_or_unknown_click) {
+	button_state_msg_t state = (button_state_msg_t)atomic_get(&button_state);
+	bool valid_click = 
+		state == SINGLE_CLICK || 
+		state == DOUBLE_CLICK || 
+		state == TRIPLE_CLICK || 
+		state == CUADRUPLE_CLICK || 
+		state == QUINTUPLE_CLICK || 
+		state == UNKNOWN_CLICK;
+	if (valid_click) {
 		btn_notify_state(state);
 	} else if (state != NONE) {
 		btn_notify_state(HOLD);
@@ -341,15 +354,12 @@ static void btn_press_thread(void *p1, void *p2, void *p3)
 	while (true) {
 		k_sem_take(&btn_press_sem, K_FOREVER);
 
-		enum ButtonState_e state =
-			(enum ButtonState_e)atomic_get(&button_state);
+		button_state_msg_t state = (button_state_msg_t)atomic_get(&button_state);
 
 		if (state == NONE) {
 			state = btn_notify_state(PRESS);
 		}
 		
-		// int32_t current_time_since_press = timer_since_press_period_ms;
-		// int32_t current_time_since_hold = timer_detect_hold_ms;
 		int32_t click_press_time_adjusted_ms = CLICK_PRESS_TIME_MS;			
 		int32_t hold_time_adjusted_ms = CLICK_HOLD_TIME_MS;
 		#ifdef FEATURE_DEEP_SLEEP
@@ -397,8 +407,7 @@ static void btn_release_thread(void *p1, void *p2, void *p3)
 	{
 		k_sem_take(&btn_release_sem, K_FOREVER);
 
-		enum ButtonState_e state =
-			(enum ButtonState_e)atomic_get(&button_state);
+		button_state_msg_t state = (button_state_msg_t)atomic_get(&button_state);
 
 		if (state == PRESS) {
 			state = btn_notify_state(RELEASE);
@@ -414,8 +423,20 @@ static void btn_release_thread(void *p1, void *p2, void *p3)
 			if (state == SINGLE_CLICK) {
 				atomic_set(&button_state, DOUBLE_CLICK);
 			} else if (state == DOUBLE_CLICK) {
+				atomic_set(&button_state, TRIPLE_CLICK);
+			} else if (state == TRIPLE_CLICK) {
+				atomic_set(&button_state, CUADRUPLE_CLICK);
+			} else if (state == CUADRUPLE_CLICK) {
+				atomic_set(&button_state, QUINTUPLE_CLICK);
+			} else if (state == QUINTUPLE_CLICK) {
 				atomic_set(&button_state, UNKNOWN_CLICK);
-			} else if (state != UNKNOWN_CLICK && state != DOUBLE_CLICK) {
+			} else if (
+				state != UNKNOWN_CLICK && 
+				state != DOUBLE_CLICK && 
+				state != TRIPLE_CLICK &&
+				state != CUADRUPLE_CLICK &&
+				state != QUINTUPLE_CLICK
+			) {
 				atomic_set(&button_state, SINGLE_CLICK);
 			}
 		}
@@ -455,7 +476,7 @@ static void btn_task(void *p1, void *p2, void *p3)
 			LOG_ERR("btn_task k_msgq_get (err: %d)", err);
 			continue;
 		}
-		enum ButtonState_e state = (enum ButtonState_e)msg;
+		button_state_msg_t state = (button_state_msg_t)msg;
 		switch (state) {
 		case PRESS:
 			// LOG_INF("Button press");
@@ -493,10 +514,21 @@ static void btn_task(void *p1, void *p2, void *p3)
 			/*
 				* Equivalente a esp_restart().
 				*/
-			while (log_data_pending()) {
-				log_flush();
-			}
+			log_panic();
 			sys_reboot(SYS_REBOOT_COLD);
+			break;
+		case TRIPLE_CLICK:
+			LOG_INF("Triple click detected");
+			btn_notify_state(NONE);
+			break;
+		case CUADRUPLE_CLICK:
+			LOG_INF("Cuadruple click detected");
+			btn_notify_state(NONE);
+			break;
+		case QUINTUPLE_CLICK:
+			LOG_INF("Quintuple click detected");
+			btn_notify_state(NONE);
+			leave_action();
 			break;
 		case UNKNOWN_CLICK:
 			LOG_INF("Unknown click detected");
@@ -504,11 +536,8 @@ static void btn_task(void *p1, void *p2, void *p3)
 			break;
 		case HOLD:
 			LOG_INF("Hold detected");
-			// leave_action();
 			break;
 		case NONE:
-			// LOG_INF("Button state reset");
-			// led_off();
 			break;
 		default:
 			LOG_INF("Unknown button state: %d", state);

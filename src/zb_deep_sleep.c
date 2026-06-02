@@ -224,7 +224,7 @@ static void poweroff_evaluate(bool *should_poweroff, int64_t *next_deadline, uin
 		return;
 	}
 	if (b != 0) {
-		LOG_INF("Other blocks");
+		// LOG_INF("Other blocks");
 		if (zigbee_force_idle_after_ms != 0) {
 			*next_deadline = zigbee_force_idle_after_ms;
 			*active_blockers = b;

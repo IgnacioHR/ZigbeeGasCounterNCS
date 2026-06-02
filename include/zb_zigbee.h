@@ -77,13 +77,13 @@ typedef struct {
     zb_uint16_t main_voltage_dwell;
 } zb_zcl_power_config_attrs_t;
 
-typedef struct {
-    zb_uint32_t ota_upgrade_file_version;
-    zb_uint16_t ota_upgrade_manufacturer;
-    zb_uint16_t ota_upgrade_image_type;
-    zb_uint16_t stack_version;
-    zb_zcl_ota_upgrade_client_variable_t client_data;
-} zb_zcl_ota_cluster_attrs_t;
+// typedef struct {
+//     zb_uint32_t ota_upgrade_file_version;
+//     zb_uint16_t ota_upgrade_manufacturer;
+//     zb_uint16_t ota_upgrade_image_type;
+//     zb_uint16_t stack_version;
+//     zb_zcl_ota_upgrade_client_variable_t client_data;
+// } zb_zcl_ota_cluster_attrs_t;
 
 typedef struct zb_zcl_my_metering_attrs_s
 {
@@ -108,7 +108,7 @@ typedef struct {
 	zb_zcl_power_config_attrs_t power_config_attr;
 #endif
 	zb_zcl_my_metering_attrs_t metering_attr;
-	zb_zcl_ota_cluster_attrs_t ota_attr;
+	// zb_zcl_ota_cluster_attrs_t ota_attr;
 } gas_meter_device_ctx_t;
 
 gas_meter_device_ctx_t *get_dev_ctx_ptr(void);

@@ -19,14 +19,14 @@ LOG_MODULE_REGISTER(report_event, LOG_LEVEL_INF);
 /* The report event queue */
 K_EVENT_DEFINE(report_events);
 
-void report_event_post(uint32_t task)
+void report_event_post(uint8_t task)
 {
 	k_event_post(&report_events, task);
 }
 
-static uint32_t report_out_event_mask(void)
+static uint8_t report_out_event_mask(void)
 {
-	uint32_t mask = REPORT_CURRENT_SUMMATION_DELIVERED | REPORT_STATUS | REPORT_EXTENDED_STATUS;
+	uint8_t mask = REPORT_CURRENT_SUMMATION_DELIVERED | REPORT_STATUS | REPORT_EXTENDED_STATUS;
 #ifdef FEATURE_MEASURE_FLOW_RATE
 	mask |= REPORT_INSTANTANEOUS_DEMAND;
 #endif
@@ -36,16 +36,21 @@ static uint32_t report_out_event_mask(void)
 	return mask;
 }
 
-static uint32_t report_in_event_mask(void)
+static uint8_t report_in_event_mask(void)
 {
-	uint32_t mask = REPORT_REQUEST_TIMING;
+	uint8_t mask = REPORT_REQUEST_TIMING;
 	return mask;
 }
 
-static uint32_t report_internal_event_mask(void)
+static uint8_t report_internal_event_mask(void)
 {
-	uint32_t mask = REPORT_NEW_TIME_ADQUIRED;
+	uint8_t mask = REPORT_NEW_TIME_ADQUIRED;
 	return mask;
+}
+
+static void report_event_re_schedule_events_cb(uint8_t param) 
+{
+
 }
 
 static void report_event_task(void *p1, void *p2, void *p3)
@@ -57,10 +62,10 @@ static void report_event_task(void *p1, void *p2, void *p3)
 	LOG_INF("Report event action task started");
 	radio_report_ctx_init();
 	while (true) {
-		uint32_t mask_out = report_out_event_mask();
-		uint32_t mask_in  = report_in_event_mask();
-		uint32_t mask_internal = report_internal_event_mask();
-		uint32_t events = k_event_wait_safe(&report_events, mask_out | mask_in | mask_internal, false, K_FOREVER);
+		uint8_t mask_out = report_out_event_mask();
+		uint8_t mask_in  = report_in_event_mask();
+		uint8_t mask_internal = report_internal_event_mask();
+		uint8_t events = k_event_wait_safe(&report_events, mask_out | mask_in | mask_internal, false, K_FOREVER) & 0x000000FF;
 
 		if (!is_leaving_network() && ZB_JOINED()) {
 			zb_zcl_status_t status;
@@ -94,7 +99,8 @@ static void report_event_task(void *p1, void *p2, void *p3)
 			poweroff_mgr_user_window_extend(deep_sleep_eval_time_ms(false, false));
 			#endif
 		} else {
-			LOG_ERR("Shall re-schedule same events for later, note, shall inform the zb_deep_sleep about it");
+			zb_schedule_app_alarm((zb_callback_t)report_event_re_schedule_events_cb,events, 1000);
+			LOG_WRN("Events re-scheduled %d", events);
 		}
 	}
 }

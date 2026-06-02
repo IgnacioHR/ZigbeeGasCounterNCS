@@ -28,6 +28,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 #include <zb_nrf_platform.h>
 #include <hal/nrf_power.h>
+#include <ram_pwrdn.h>
 // #include <dk_buttons_and_leds.h> // shall be removed when working with the seeedstudio. this is DK only
 
 #include "zb_features.h"
@@ -183,6 +184,10 @@ int main(void)
 
 	// set ctx initial values before zigbee radio is started so values can be changed anytime from this moment if needed
 	retained_init();
+
+	if (IS_ENABLED(CONFIG_RAM_POWER_DOWN_LIBRARY)) {
+		power_down_unused_ram();
+	}
 
 	if (retained_shall_power_off()) {
 		LOG_DBG("Requesting WDT reset before system_off path");

@@ -21,7 +21,7 @@ enum report_events {
 	REPORT_NEW_TIME_ADQUIRED						= BIT(6),
 };
 
-void report_event_post(uint32_t task);
+void report_event_post(uint8_t task);
 void report_event_start(void);
 zb_uint64_t get_last_summation_sent();
 

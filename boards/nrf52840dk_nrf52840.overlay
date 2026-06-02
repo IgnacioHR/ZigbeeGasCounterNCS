@@ -39,9 +39,9 @@
         io-channels = <&adc 4>; /* P0.28 = AIN4 = XIAO D2/A2 */
     };
 
-    chosen {
-        zephyr,settings-partition = &storage_partition;
-    };
+    // chosen {
+    //     zephyr,settings-partition = &storage_partition;
+    // };
 
     sram_retained: sram@2003ff00 {
         compatible = "zephyr,memory-region", "mmio-sram";
