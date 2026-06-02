@@ -231,7 +231,7 @@ int main(void)
 		LOG_INF("Powering off now: direct system_off path");
 		err = poweroff();
 		if (err != 0) {
-			k_panic();
+			sys_reboot(SYS_REBOOT_COLD);
 		}
 	}
 
