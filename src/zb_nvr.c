@@ -18,9 +18,12 @@ LOG_MODULE_REGISTER(nvr, LOG_LEVEL_INF);
 
 static bool nvr_started = false;
 static K_MUTEX_DEFINE(nvr_mutex);
+static uint32_t nvr_dirty_mask;
 
 #define GM_SETTINGS_COUNTER_KEY 		"gm/counter"
 #define GM_SETTINGS_TIME_KEY 				"gm/time"
+
+static struct k_work_delayable nvr_work;
 
 static struct gm_nvram_state {
 	struct k_sem loaded_sem;
@@ -47,37 +50,43 @@ static void gm_nvram_mark_loaded(int result)
 	k_sem_give(&nvram.loaded_sem);
 }
 
-static struct k_work_delayable nvr_work;
-
 static void nvr_work_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
+	int err;
 
-	uint64_t to_save_count = get_current_summ();
-	uint32_t to_save_time = get_current_time();
-
-	int err = settings_save_one(GM_SETTINGS_COUNTER_KEY, &to_save_count, sizeof(to_save_count));
-	if (err == 0) {
-		LOG_INF("Counter value stored %lld", to_save_count);
-	} else {
-		LOG_ERR("Error saving counter to settings: %d", err);
-		set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
-		set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
-	}
-	reed_led_off();
-	if (to_save_time > 0) {
-		err = settings_save_one(GM_SETTINGS_TIME_KEY, &to_save_time, sizeof(to_save_time));
+	k_mutex_lock(&nvr_mutex, K_FOREVER);
+	if (nvr_dirty_mask & NVR_ITEM_COUNTER) {
+		uint64_t to_save_count = get_current_summ();
+		err = settings_save_one(GM_SETTINGS_COUNTER_KEY, &to_save_count, sizeof(to_save_count));
 		if (err == 0) {
-			LOG_INF("Battery time stored %d", to_save_time);
+			LOG_INF("Counter value stored %lld", to_save_count);
 		} else {
-			LOG_ERR("Error saving coordinator time to settings: %d", err);
+			LOG_ERR("Error saving counter to settings: %d", err);
 			set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
 			set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
 		}
+#ifdef CONFIG_DEBUG
+		reed_led_off();
+#endif
 	}
-	#ifdef FEATURE_DEEP_SLEEP
-		poweroff_mgr_block_clear(POF_BLOCK_SAVE_NVS);
-	#endif
+	if (nvr_dirty_mask & NVR_ITEM_BAT_TIME) {
+		uint32_t to_save_time = get_old_time();
+		if (to_save_time > 0) {
+			err = settings_save_one(GM_SETTINGS_TIME_KEY, &to_save_time, sizeof(to_save_time));
+			if (err == 0) {
+				LOG_INF("Battery time stored %d", to_save_time);
+			} else {
+				LOG_ERR("Error saving coordinator time to settings: %d", err);
+				set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
+				set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
+			}
+		}
+	}
+	k_mutex_unlock(&nvr_mutex);
+#ifdef FEATURE_DEEP_SLEEP
+	poweroff_mgr_block_clear(POF_BLOCK_SAVE_NVS);
+#endif
 }
 
 static int counter_set_from_u64(uint64_t value)
@@ -275,8 +284,11 @@ int nvr_wait_loaded(k_timeout_t timeout)
  * @brief Schedules a save of counter value to NVS as soon as possible
  * 
  */
-void nvr_schedule_save(void)
+void nvr_schedule_save(uint32_t nvr_items_mask)
 {
 	poweroff_mgr_block_set(POF_BLOCK_SAVE_NVS);
+	k_mutex_lock(&nvr_mutex, K_FOREVER);
+	nvr_dirty_mask |= nvr_items_mask;
+	k_mutex_unlock(&nvr_mutex);
   k_work_reschedule(&nvr_work, K_NO_WAIT);
 }

@@ -55,7 +55,8 @@ static void report_result_work_handler(struct k_work *work)
 				retained_set_last_summation_sent(get_current_summ());
 			}
 			if (ev.attr_id == ZB_ZCL_ATTR_POWER_CONFIG_BATTERY_PERCENTAGE_REMAINING_ID) {
-				nvr_schedule_save();
+				set_init_old_time(get_current_time());
+				nvr_schedule_save(NVR_ITEM_BAT_TIME);
 			}
 		}
 	}

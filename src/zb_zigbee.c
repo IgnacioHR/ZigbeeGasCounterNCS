@@ -27,7 +27,7 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 #define ZIGBEE_MAIN_LOOP_TASK_PRIORITY          0
 
 /* LED used for device identification. */
-#define IDENTIFY_LED                        DK_LED4
+// #define IDENTIFY_LED                        DK_LED4
 
 #define TO_PERCENTAGE           (double)(200.0 / ((double)MAX_BATTERY_VOLTAGE - (double)MIN_BATTERY_VOLTAGE))
 
@@ -536,14 +536,14 @@ void zb_counter_increment(void)
         dev_ctx.metering_attr.base.curr_summ_delivered.high += 1;
     }
     report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
-    nvr_schedule_save();
+    nvr_schedule_save(NVR_ITEM_COUNTER);
 }
 
 static void zb_counter_set(zb_uint48_t value)
 {
     dev_ctx.metering_attr.base.curr_summ_delivered = value;
     report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
-    nvr_schedule_save();
+    nvr_schedule_save(NVR_ITEM_COUNTER);
 }
 
 /**

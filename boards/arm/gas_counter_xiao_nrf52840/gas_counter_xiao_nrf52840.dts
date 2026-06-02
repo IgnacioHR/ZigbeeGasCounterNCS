@@ -1,0 +1,13 @@
+/*
+ * Custom board based on Seeed XIAO BLE nRF52840
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+#include "gas_counter_xiao_nrf52840_common.dtsi"
+
+/ {
+	model = "Gas Counter XIAO nRF52840";
+	compatible = "ihr,gas-counter-xiao-nrf52840";
+};

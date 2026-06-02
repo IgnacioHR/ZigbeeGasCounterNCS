@@ -25,8 +25,10 @@ static atomic_t started_from_deep_sleep = ATOMIC_INIT(false);
 #define MAIN_BUTTON_NODE DT_ALIAS(main_button)
 static const struct gpio_dt_spec main_button = GPIO_DT_SPEC_GET(MAIN_BUTTON_NODE, gpios);
 
+#ifdef CONFIG_DEBUG
 #define LED0_NODE DT_ALIAS(led0)
 static const struct gpio_dt_spec led_main_button = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+#endif
 
 /** Thread stacks and priorities */
 #define BTN_THREAD_STACK_SIZE    1024
@@ -129,7 +131,9 @@ static void main_button_isr_cb(const struct device *dev, struct gpio_callback *c
 
 	last_main_btn_time_ms = now_ms;
 
+#ifdef CONFIG_DEBUG
 	gpio_pin_set_dt(&led_main_button, level);
+#endif
 }
 
 /**
@@ -200,6 +204,7 @@ int main_button_gpio_wakeup(void)
 	return gpio_pin_interrupt_configure_dt(&main_button, GPIO_INT_LEVEL_ACTIVE);
 }
 
+#ifdef CONFIG_DEBUG
 /**
  * @brief Hardware configuration of the led associated with the main button
  * 
@@ -214,6 +219,7 @@ static int main_button_led_configure(void)
 	}
 	return 0;
 }
+#endif
 
 /**
  * @brief Overall hardware initialization of the main button module. Called from the main function at startup
@@ -226,9 +232,11 @@ int main_button_gpio_init(void)
 	err = main_button_configure();
 	if (err < 0)
 		return err;
+#ifdef CONFIG_DEBUG
 	err = main_button_led_configure();
 	if (err < 0)
 		return err;
+#endif
 	return 0;
 }
 
@@ -451,7 +459,9 @@ static void btn_task(void *p1, void *p2, void *p3)
 		switch (state) {
 		case PRESS:
 			// LOG_INF("Button press");
+#ifdef CONFIG_DEBUG
 			gpio_pin_set_dt(&led_main_button, 1);
+#endif
 			main_loop_post(SHALL_ENABLE_ZIGBEE);
 #ifdef FEATURE_DEEP_SLEEP
 			poweroff_mgr_user_window_extend(deep_sleep_eval_time_ms(true, false));
@@ -459,7 +469,9 @@ static void btn_task(void *p1, void *p2, void *p3)
 			break;
 		case RELEASE:
 			// LOG_INF("Button release");
+#ifdef CONFIG_DEBUG
 			gpio_pin_set_dt(&led_main_button, 0);
+#endif
 			break;
 		case SINGLE_CLICK:
 			LOG_INF("Single click detected");

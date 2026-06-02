@@ -196,7 +196,7 @@ static void poweroff_evaluate(bool *should_poweroff, int64_t *next_deadline, uin
 	}
 
 	if (min_awake_until_ms != 0 && now < min_awake_until_ms) {
-		LOG_INF("Awake until %lld", min_awake_until_ms - now);
+		// LOG_INF("Awake until %lld", min_awake_until_ms - now);
 		*next_deadline = min_awake_until_ms;
 		*active_blockers = b;
 		k_spin_unlock(&pof_lock, key);
@@ -210,7 +210,7 @@ static void poweroff_evaluate(bool *should_poweroff, int64_t *next_deadline, uin
 		return;
 	}
 	if (user_window_until_ms != 0 && now < user_window_until_ms) {
-		LOG_INF("User window until %lld", user_window_until_ms - now);
+		// LOG_INF("User window until %lld", user_window_until_ms - now);
 		*next_deadline = user_window_until_ms;
 		*active_blockers = b;
 		k_spin_unlock(&pof_lock, key);

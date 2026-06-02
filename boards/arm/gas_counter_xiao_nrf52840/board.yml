@@ -1,0 +1,6 @@
+board:
+  name: gas_counter_xiao_nrf52840
+  full_name: Gas Counter XIAO nRF52840
+  vendor: ihr
+  socs:
+    - name: nrf52840

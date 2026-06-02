@@ -171,7 +171,7 @@ static void adc_task(void *p1, void *p2, void *p3)
 	while (true) {
 		k_sem_take(&adc_sem, K_FOREVER);
 		LOG_INF("Going measure ADC input");
-		int32_t bat_mv;
+		int32_t bat_mv = 0;
 
 		int err = battery_adc_read_mv(&bat_mv);
 		if (err < 0) {

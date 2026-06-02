@@ -1,0 +1,10 @@
+# XIAO BLE board configuration
+
+# Copyright (c) 2022 Marcin Niestroj
+# SPDX-License-Identifier: Apache-2.0
+
+if BOARD_GAS_COUNTER_XIAO_NRF52840
+
+source "boards/common/usb/Kconfig.cdc_acm_serial.defconfig"
+
+endif # BOARD_XIAO_BLE

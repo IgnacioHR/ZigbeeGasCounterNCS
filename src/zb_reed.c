@@ -27,8 +27,10 @@ static K_MUTEX_DEFINE(reed_mutex);
 #define REED_INPUT_NODE DT_ALIAS(reed_input)
 static const struct gpio_dt_spec reed_input = GPIO_DT_SPEC_GET(REED_INPUT_NODE, gpios);
 
+#ifdef CONFIG_DEBUG
 #define LED1_NODE DT_ALIAS(led1)
 static const struct gpio_dt_spec led_reed_input = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
+#endif
 
 int reed_read_early_level(void)
 {
@@ -89,6 +91,7 @@ static bool reed_process_interrupt(void)
 	return increment;
 }
 
+#ifdef CONFIG_DEBUG
 void reed_led_on()
 {
 	gpio_pin_set_dt(&led_reed_input, 1);
@@ -98,6 +101,7 @@ void reed_led_off()
 {
 	gpio_pin_set_dt(&led_reed_input, 0);
 }
+#endif
 
 static K_SEM_DEFINE(reed_sem, 0, K_SEM_MAX_LIMIT);
 
@@ -146,7 +150,9 @@ void check_counter_increment(void)
 {
 	reed_thread_check_started();
 	if (reed_process_interrupt()) {
+#ifdef CONFIG_DEBUG
 		reed_led_on();
+#endif		
 		nvr_wait_loaded(GM_NVRAM_WAIT_TIMEOUT);
 		zb_counter_increment();
 	}
@@ -228,6 +234,7 @@ static int reed_input_init(void)
 	return 0;
 }
 
+#ifdef CONFIG_DEBUG
 static int reed_input_led_init(void)
 {
 	int err = gpio_pin_configure_dt(&led_reed_input, GPIO_OUTPUT_ACTIVE);
@@ -238,6 +245,7 @@ static int reed_input_led_init(void)
 
 	return 0;
 }
+#endif
 
 int reed_gpio_init(void)
 {
@@ -245,9 +253,11 @@ int reed_gpio_init(void)
 	err = reed_input_init();
 	if (err < 0)
 		return err;
+#ifdef CONFIG_DEBUG
 	err = reed_input_led_init();
 	if (err < 0)
 		return err;
+#endif
 
 	return 0;
 }

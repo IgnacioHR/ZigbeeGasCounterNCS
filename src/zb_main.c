@@ -55,10 +55,10 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 // #define ZIGBEE_NETWORK_STATE_LED            DK_LED3
 
 /* Button used to enter the Identify mode. */
-#define IDENTIFY_MODE_BUTTON                DK_BTN4_MSK
+// #define IDENTIFY_MODE_BUTTON                DK_BTN4_MSK
 
 /* Button to start Factory Reset */
-#define FACTORY_RESET_BUTTON                IDENTIFY_MODE_BUTTON
+// #define FACTORY_RESET_BUTTON                IDENTIFY_MODE_BUTTON
 
 #define SLEEP_TIME_MS (10 * 60 * 1000)
 
@@ -168,9 +168,7 @@ int poweroff(void) {
 	}
 	if (err == 0) {
 		LOG_INF("Powering off now");
-		while (log_data_pending()) {
-			log_flush();
-		}
+		log_panic();
 		sys_poweroff();
 	}
 	return 0;
@@ -224,7 +222,9 @@ int main(void)
 	check_shall_enable_radio(wakeup_cause);
 	LOG_DBG("Zigbee Gas Counter started");
 
+#ifdef CONFIG_DEBUG
 	reed_led_off();
+#endif
 
 	// if main loop has not started we can safely sleep now
 	if (!is_main_loop_started()) {

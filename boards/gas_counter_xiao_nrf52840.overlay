@@ -1,0 +1,97 @@
+/*
+ * Copyright (c) 2025 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+/ {
+
+    aliases {
+        main-button = &main_button;
+        reed-input = &reed_input;
+        batt-divider-en = &batt_divider_en;
+        watchdog0 = &wdt0;
+    };
+
+    app_gpios {
+        compatible = "gpio-keys";
+
+        main_button: main_button {
+            gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+            label = "Main button";
+        };
+
+        reed_input: reed_input {
+            gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+            label = "Gas reed input";
+        };
+    };
+
+    gpio_outputs {
+        compatible = "gpio-leds";
+        
+        batt_divider_en: batt_divider_en {
+            gpios = <&gpio0 29 GPIO_ACTIVE_HIGH>;
+            label = "Battery divider enable";
+        };
+    };
+
+    zephyr,user {
+        io-channels = <&adc 4>; /* P0.28 = AIN4 = XIAO D2/A2 */
+    };
+
+    // chosen {
+    //     zephyr,settings-partition = &storage_partition;
+    // };
+
+    sram_retained: sram@2003ff00 {
+        compatible = "zephyr,memory-region", "mmio-sram";
+        reg = <0x2003ff00 0x100>;
+        zephyr,memory-region = "RetainedMem";
+        status = "okay";
+
+        retainedmem {
+            compatible = "zephyr,retained-ram";
+            status = "okay";
+            #address-cells = <1>;
+            #size-cells = <1>;
+
+            gm_retention: retention@0 {
+                compatible = "zephyr,retention";
+                reg = <0x0 0x100>;
+                status = "okay";
+                prefix = [47 4d]; /* "GM" */
+                checksum = <4>;
+            };
+        };
+    };
+};
+
+&sram0 {
+    reg = <0x20000000 0x3ff00>;
+};
+
+&radio {
+    status = "okay";
+    zephyr,deferred-init;
+};
+
+&wdt0 {
+    status = "okay";
+};
+
+&adc {
+    status = "okay";
+
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    channel@4 {
+        reg = <4>;
+        zephyr,gain = "ADC_GAIN_1_6";
+        zephyr,reference = "ADC_REF_INTERNAL";
+        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 40)>;
+        zephyr,input-positive = <NRF_SAADC_AIN4>;
+        zephyr,resolution = <12>;
+        zephyr,oversampling = <4>;
+    };
+};
