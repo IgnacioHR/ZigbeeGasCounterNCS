@@ -511,22 +511,21 @@ static void btn_task(void *p1, void *p2, void *p3)
 		case DOUBLE_CLICK:
 			LOG_INF("Double click detected");
 			btn_notify_state(NONE);
-			/*
-				* Equivalente a esp_restart().
-				*/
-			log_panic();
-			sys_reboot(SYS_REBOOT_COLD);
 			break;
 		case TRIPLE_CLICK:
-			LOG_INF("Triple click detected");
+			LOG_INF("Triple click detected - reboot");
 			btn_notify_state(NONE);
+#if (IS_ENABLED(CONFIG_LOG))
+			log_panic();
+#endif
+			sys_reboot(SYS_REBOOT_COLD);
 			break;
 		case CUADRUPLE_CLICK:
 			LOG_INF("Cuadruple click detected");
 			btn_notify_state(NONE);
 			break;
 		case QUINTUPLE_CLICK:
-			LOG_INF("Quintuple click detected");
+			LOG_INF("Quintuple click detected - leave");
 			btn_notify_state(NONE);
 			leave_action();
 			break;

@@ -230,7 +230,9 @@ static void nvr_init(void)
 	}
 	
 	k_work_init_delayable(&nvr_work, nvr_work_handler);
+#if (IS_ENABLED(CONFIG_LOG))
 	log_filter_set(NULL, 0, log_source_id_get("fs_nvs"), LOG_LEVEL_WRN);
+#endif
 	int	err = settings_subsys_init();
 	if (err != 0) {
 		LOG_ERR("settings_subsys_init failed: (err: %d)",err);

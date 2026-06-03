@@ -1,0 +1,13 @@
+description: XIAO nRF52840 battery measurement frontend
+
+compatible: "gas-counter,xiao-battery-frontend"
+
+properties:
+  enable-gpios:
+    type: phandle-array
+    required: true
+    description: |
+      GPIO controlling the XIAO onboard battery measurement frontend.
+      On XIAO nRF52840, P0.14 enables the battery voltage divider when driven low.
+      The pin should normally be left high impedance and only driven low while
+      measuring VBAT through P0.31/AIN7.

@@ -1004,7 +1004,9 @@ static void fota_evt_handler(const struct zigbee_fota_evt *evt)
 	case ZIGBEE_FOTA_EVT_FINISHED:
 		poweroff_mgr_block_clear(POF_BLOCK_OTA);
 		LOG_INF("Zigbee FOTA finished, reboot required");
+#if (IS_ENABLED(CONFIG_LOG))
         log_panic();
+#endif
         k_sleep(K_MSEC(100));
 	    sys_reboot(SYS_REBOOT_COLD);
 		break;

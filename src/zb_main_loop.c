@@ -52,14 +52,6 @@ static void main_loop_task(void *p1, void *p2, void *p3)
 			fire_adc();
 		}
 #endif
-// #ifdef FEATURE_DEEP_SLEEP
-// 		if (events & SHALL_START_DEEP_SLEEP) {
-// 			LOG_INF("Start processing: SHALL_START_DEEP_SLEEP event");
-// 		}
-// 		if (events & SHALL_STOP_DEEP_SLEEP) {
-// 			LOG_INF("Start processing: SHALL_STOP_DEEP_SLEEP event");
-// 		}
-// #endif
 	}
 }
 static K_THREAD_DEFINE(main_loop_tid, MAIN_LOOP_TASK_STACK_SIZE, main_loop_task, NULL, NULL, NULL, MAIN_LOOP_TASK_PRIORITY, 0, K_TICKS_FOREVER);

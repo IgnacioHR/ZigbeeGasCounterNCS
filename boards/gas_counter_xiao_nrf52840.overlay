@@ -10,6 +10,7 @@
         reed-input = &reed_input;
         batt-divider-en = &batt_divider_en;
         watchdog0 = &wdt0;
+        xiao-read-bat-enable = &xiao_battery_frontend;
     };
 
     app_gpios {
@@ -63,6 +64,12 @@
                 checksum = <4>;
             };
         };
+    };
+
+    xiao_battery_frontend: xiao_battery_frontend {
+        compatible = "gas-counter,xiao-battery-frontend";
+        enable-gpios = <&gpio0 14 GPIO_ACTIVE_LOW>;
+        status = "okay";
     };
 };
 

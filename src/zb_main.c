@@ -43,6 +43,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #include "zb_retained.h"
 #include "zb_reed.h"
 #include "zb_deep_sleep.h"
+#include "zb_xiao.h"
 
 /* Device endpoint, used to receive ZCL commands. */
 #define APP_TEMPLATE_ENDPOINT               10
@@ -66,6 +67,8 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 static int configure_gpio(void)
 {
 	int err;
+
+	xiao_battery_frontend_disable();
 
 	err = main_button_gpio_init();
 	if (err < 0)
@@ -169,7 +172,9 @@ int poweroff(void) {
 	}
 	if (err == 0) {
 		LOG_INF("Powering off now");
+#if (IS_ENABLED(CONFIG_LOG))
 		log_panic();
+#endif
 		sys_poweroff();
 	}
 	return 0;
