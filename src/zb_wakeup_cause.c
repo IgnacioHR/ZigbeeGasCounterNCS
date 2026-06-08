@@ -20,54 +20,6 @@ LOG_MODULE_REGISTER(wakeup_cause, LOG_LEVEL_INF);
 
 static gm_wakeup_cause_t wakeup_cause;
 
-static bool cpu_lockup_is_probable_gpio_wakeup(const struct gm_boot_snapshot *snap)
-{
-	int expected_reed;
-	int reed_now;
-
-	expected_reed = retained_get_next_reed_level();
-
-	if (expected_reed != 0) {
-		LOG_WRN("CPU_LOCKUP is not reed inactive wake: expected_reed=%d",
-			expected_reed);
-		return false;
-	}
-
-	if (snap->reed_err != 0) {
-		LOG_WRN("CPU_LOCKUP reed workaround rejected: snapshot reed_err=%d",
-			snap->reed_err);
-		return false;
-	}
-
-	if (snap->reed_level != 0) {
-		LOG_WRN("CPU_LOCKUP reed workaround rejected: snapshot reed_level=%d expected=0",
-			snap->reed_level);
-		return false;
-	}
-
-	/*
-	 * Optional confirmation using a fresh read.
-	 * If this read fails, reject the workaround rather than guessing.
-	 */
-	reed_now = reed_read_early_level();
-	if (reed_now < 0) {
-		LOG_WRN("CPU_LOCKUP reed workaround rejected: current reed read failed: %d",
-			reed_now);
-		return false;
-	}
-
-	if (reed_now != 0) {
-		LOG_WRN("CPU_LOCKUP reed workaround rejected: current reed_level=%d expected=0",
-			reed_now);
-		return false;
-	}
-
-	LOG_WRN("CPU_LOCKUP treated as REED_INACTIVE: snapshot=%d current=%d expected=%d",
-		snap->reed_level, reed_now, expected_reed);
-
-	return true;
-}
-
 /**
  * @brief Detect wake up reason. Might update some status bits in
  *        the device
@@ -169,11 +121,6 @@ int detect_cause_init(void)
 	}
 
 	if (by_lockup) {
-		if (cpu_lockup_is_probable_gpio_wakeup(snap)) {
-			LOG_WRN("Wakeup from reed inactive reported as CPU lockup");
-			wakeup_cause = GM_WAKEUP_GPIO_UNKNOWN;
-			return 0;
-		}
 		LOG_DBG("Wakeup from CPU lockup");
 		wakeup_cause = GM_WAKEUP_OTHER;
 		set_device_extended_status_bit(ZB_ZCL_METERING_PROGRAM_MEMORY_ERROR);
@@ -226,19 +173,19 @@ gm_wakeup_cause_t wakeup_cause_init(void)
 	switch (wakeup_cause)
 	{
 	case GM_WAKEUP_GPIO_UNKNOWN:
-		bool is_main_button = snap->main_button_level == 1;
-		bool is_reed = snap->reed_level == retained_get_next_reed_level();
+		bool is_main_button = snap->main_button_latch == 1;
+		bool is_reed = snap->reed_latch == 1;
 		if (is_reed) {
 			LOG_INF("Seed pulse detected during wakeup");
-			wakeup_cause = snap->reed_level == 1 ? GM_WAKEUP_GPIO_REED_PULSE_ACTIVE : GM_WAKEUP_GPIO_REED_PULSE_INACTIVE;
+			wakeup_cause = retained_get_next_reed_level() == 1 ? GM_WAKEUP_GPIO_REED_PULSE_ACTIVE : GM_WAKEUP_GPIO_REED_PULSE_INACTIVE;
 		}
 		if (is_main_button) {
 			LOG_INF("Main button press detected during wakeup");
-			wakeup_cause = snap->main_button_level == GM_WAKEUP_GPIO_MAIN_BTN_PRESS;
+			wakeup_cause = snap->main_button_latch == GM_WAKEUP_GPIO_MAIN_BTN_PRESS;
 			#ifdef FEATURE_DEEP_SLEEP
 				set_started_from_deep_sleep(true);
 			#endif
-			main_button_fire_from_start();
+			main_button_fire_press();
 			main_loop_post(SHALL_ENABLE_ZIGBEE);
 			report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
 			#ifdef FEATURE_MEASURE_BATTERY_LEVEL

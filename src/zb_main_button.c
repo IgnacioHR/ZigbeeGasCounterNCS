@@ -139,12 +139,7 @@ static void main_button_isr_cb(const struct device *dev, struct gpio_callback *c
 #endif
 }
 
-/**
- * @brief Hardware configuration of the main button input gpio pin and interrupt
- * 
- * @return int 
- */
-static int main_button_configure(void)
+static int main_button_configure(int *level)
 {
 	int err;
 
@@ -167,6 +162,7 @@ static int main_button_configure(void)
 
 	static struct gpio_callback main_button_cb_data;
 	gpio_init_callback(&main_button_cb_data, main_button_isr_cb, BIT(main_button.pin));
+	*level = gpio_pin_get_dt(&main_button);
 	err = gpio_add_callback(main_button.port, &main_button_cb_data);
 	if (err < 0) {
 		LOG_ERR("GPIO can't add callback of main button interrupt (err: %d)", err);
@@ -176,9 +172,22 @@ static int main_button_configure(void)
 	return 0;
 }
 
-void main_button_fire_from_start(void)
+/**
+ * @brief Programatically initiates the process of button press normally fired by the interruption
+ * 
+ */
+void main_button_fire_press(void)
 {
 	k_sem_give(&btn_press_sem);
+}
+
+/**
+ * @brief Programatically initiates the process of button release normally fired by the interruption
+ * 
+ */
+void main_button_fire_release(void)
+{
+	k_sem_give(&btn_release_sem);
 }
 
 /**
@@ -225,14 +234,15 @@ static int main_button_led_configure(void)
 #endif
 
 /**
- * @brief Overall hardware initialization of the main button module. Called from the main function at startup
+ * @brief Hardware configuration of the main button input gpio pin and interrupt
+ * @param level stores the pin level prior to setup the interrupt
  * 
  * @return int 
  */
-int main_button_gpio_init(void)
+int main_button_gpio_init(int *level)
 {
 	int err;
-	err = main_button_configure();
+	err = main_button_configure(level);
 	if (err < 0)
 		return err;
 #ifdef CONFIG_DEBUG
@@ -558,7 +568,7 @@ void main_button_start(void)
  * 
  * @return int 
  */
-int get_main_button_level(void)
+int main_button_get_level(void)
 {
 	return gpio_pin_get_dt(&main_button);
 }

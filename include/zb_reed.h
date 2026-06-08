@@ -3,7 +3,7 @@
 #ifndef ZB_REED_H
 #define ZB_REED_H
 
-int reed_gpio_init(void);
+int reed_gpio_init(int *level);
 int reed_get_level(void);
 int reed_gpio_wakeup(void);
 void check_counter_increment(void);

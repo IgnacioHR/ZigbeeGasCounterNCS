@@ -10,10 +10,8 @@ struct gm_boot_snapshot {
 	int supported_ret;
 	uint32_t supported_reset_cause;
 	int clear_ret;
-	int main_button_level;
-	int reed_level;
-	int main_button_err;
-	int reed_err;
+	int main_button_latch;
+	int reed_latch;
 };
 
 const struct gm_boot_snapshot *gm_boot_snapshot_get(void);

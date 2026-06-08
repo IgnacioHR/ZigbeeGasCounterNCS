@@ -15,11 +15,13 @@ LOG_MODULE_REGISTER(reed, LOG_LEVEL_INF);
 #include "zb_main.h"
 #include "zb_zigbee.h"
 #include "zb_gpio_stable.h"
+#include "zb_boot_snapshot.h"
+#include "zb_deep_sleep.h"
 
 #define GM_NVRAM_WAIT_TIMEOUT K_SECONDS(5)
 
 #define REED_THREAD_STACK_SIZE	2048
-#define REED_THREAD_PRIORITY			 8
+#define REED_THREAD_PRIORITY			 1
 
 static bool reed_started = false;
 static K_MUTEX_DEFINE(reed_mutex);
@@ -130,7 +132,9 @@ static void reed_thread(void *p1, void *p2, void *p3)
 	LOG_DBG("Reed thread started");
 	while (true) {
 		k_sem_take(&reed_sem, K_FOREVER);
+		poweroff_mgr_block_set(POF_BLOCK_COUNTER);
 		check_counter_increment();
+		poweroff_mgr_block_clear(POF_BLOCK_COUNTER);
 	}
 }
 static K_THREAD_DEFINE(reed_tid, REED_THREAD_STACK_SIZE, reed_thread, NULL, NULL, NULL, REED_THREAD_PRIORITY, 0, K_TICKS_FOREVER);
@@ -201,7 +205,7 @@ int reed_gpio_wakeup(void)
 	return -EINVAL;
 }
 
-static int reed_input_init(void)
+static int reed_input_init(int *level)
 {
 	int err;
 
@@ -223,6 +227,7 @@ static int reed_input_init(void)
 
 	static struct gpio_callback reed_input_cb_data;
 	gpio_init_callback(&reed_input_cb_data, reed_input_cb, BIT(reed_input.pin));
+	*level = gpio_pin_get_dt(&reed_input);
 	err = gpio_add_callback(reed_input.port, &reed_input_cb_data);
 	if (err < 0) {
 		LOG_ERR("GPIO can't add callback of reed input interrupt (err: %d)", err);
@@ -247,10 +252,16 @@ static int reed_input_led_init(void)
 }
 #endif
 
-int reed_gpio_init(void)
+/**
+ * @brief Hardware configuration of the reed input gpio pin and interrupt
+ * 
+ * @param level stores the pin level prior to setup the interrupt
+ * @return int 
+ */
+int reed_gpio_init(int *level)
 {
 	int err;
-	err = reed_input_init();
+	err = reed_input_init(level);
 	if (err < 0)
 		return err;
 #ifdef CONFIG_DEBUG

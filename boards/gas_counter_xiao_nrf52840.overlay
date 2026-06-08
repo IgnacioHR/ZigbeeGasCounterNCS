@@ -102,3 +102,8 @@
         zephyr,oversampling = <4>;
     };
 };
+
+&gpio0 {
+	latch-detect;
+	sense-edge-mask = <0x0000000c>; /* BIT(2) | BIT(3) */
+};

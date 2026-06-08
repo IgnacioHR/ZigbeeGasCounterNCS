@@ -64,16 +64,23 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 #define SLEEP_TIME_MS (10 * 60 * 1000)
 
-static int configure_gpio(void)
+static gm_wakeup_cause_t wakeup_cause;
+
+gm_wakeup_cause_t get_wakeup_cause(void)
+{
+	return wakeup_cause;
+}
+
+static int configure_gpio(int *main_button_level, int *reed_level)
 {
 	int err;
 
 	xiao_battery_frontend_disable();
 
-	err = main_button_gpio_init();
+	err = main_button_gpio_init(main_button_level);
 	if (err < 0)
 		return err;
-	err = reed_gpio_init();
+	err = reed_gpio_init(reed_level);
 	if (err < 0)
 		return err;
 	err = adc_gpio_init();
@@ -124,14 +131,14 @@ static void log_radio_not_needed_for_reed_inactive(uint64_t not_reported)
 	LOG_INF("Still %d pulses remaining to start radio", remaining);
 }
 
-static void check_shall_enable_radio(gm_wakeup_cause_t wakeup_cause)
+static void check_shall_enable_radio(gm_wakeup_cause_t wakeup_cause, bool b_missed_reed)
 {
 	uint64_t not_reported = 0;
 	bool enable_radio;
 
 	enable_radio = wakeup_cause_requires_radio(wakeup_cause);
 
-	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE) {
+	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE || b_missed_reed) {
 		enable_radio = reed_inactive_requires_radio(&not_reported);
 	} else if (enable_radio) {
 		LOG_INF("Radio shall be started due to wakeup_cause");
@@ -142,7 +149,7 @@ static void check_shall_enable_radio(gm_wakeup_cause_t wakeup_cause)
 		return;
 	}
 
-	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE) {
+	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE || b_missed_reed) {
 		log_radio_not_needed_for_reed_inactive(not_reported);
 	}
 }
@@ -183,7 +190,6 @@ int poweroff(void) {
 int main(void)
 {
 	int err;
-	gm_wakeup_cause_t wakeup_cause;
 
 	LOG_DBG("Starting Zigbee Gas Counter");
 
@@ -205,7 +211,9 @@ int main(void)
 
 	app_device_ctx_init();
 
-	err = configure_gpio();
+	int main_button_level;
+	int reed_level;
+	err = configure_gpio(&main_button_level, &reed_level);
 	if (err < 0) {
 		return err;
 	}
@@ -217,19 +225,29 @@ int main(void)
 
 	wakeup_cause = wakeup_cause_init();
 	poweroff_mgr_enable_for_wakeup(wakeup_cause);
-	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE)
+	// check for missing interrupts, happens if the user releases the button prior to setting up
+	// the interrupts
+	if (wakeup_cause == GM_WAKEUP_GPIO_MAIN_BTN_PRESS && main_button_level == 0) {
+		// the user pressed the button, device was wake up but the user released the button
+		// and the interrupt has not been able to catch. so fire event manually now
+		main_button_fire_release();
+	}
+	bool b_missed_reed = false;
+	// LOG_INF("wakeup_cause = %d reed_level = %d", wakeup_cause, reed_level);
+	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_ACTIVE && reed_level == 0) {
+		// the user has release the button and we missed the event
+		b_missed_reed = true;
+	}	
+	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE || b_missed_reed)
 		check_counter_increment();
 
-	/* Initialize */
-	// configure_dk_gpio(); // this initialize the 4 buttons in the nRF52840DK board. Remove this call for the SeeedStubio board.
-	// register_factory_reset_button(FACTORY_RESET_BUTTON); // Remove this call for the SeeedStubio board.
 	if (!is_reed_wakeup_cause(wakeup_cause)) {
  		main_button_start();
 	}
 #ifdef FEATURE_MEASURE_FLOW_RATE
 	// TODO, timer to reset instantaneous demand to 0
 #endif
-	check_shall_enable_radio(wakeup_cause);
+	check_shall_enable_radio(wakeup_cause, b_missed_reed);
 	LOG_DBG("Zigbee Gas Counter started");
 
 #ifdef CONFIG_DEBUG
