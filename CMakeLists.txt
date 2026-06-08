@@ -6,11 +6,47 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
+if(DEFINED WEST_PYTHON)
+  set(PYTHON_EXECUTABLE ${WEST_PYTHON})
+else()
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
+endif()
+
+set(GAS_COUNTER_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(GAS_COUNTER_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.json")
+set(GAS_COUNTER_VERSION_CONF "${GAS_COUNTER_GENERATED_DIR}/gas_counter_version.conf")
+set(GAS_COUNTER_VERSION_HEADER "${GAS_COUNTER_GENERATED_DIR}/zb_version_generated.h")
+file(MAKE_DIRECTORY "${GAS_COUNTER_GENERATED_DIR}")
+
+execute_process(
+  COMMAND "${PYTHON_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_version_files.py"
+          --input "${GAS_COUNTER_VERSION_FILE}"
+          --out-conf "${GAS_COUNTER_VERSION_CONF}"
+          --out-header "${GAS_COUNTER_VERSION_HEADER}"
+  RESULT_VARIABLE gas_counter_version_gen_result
+  OUTPUT_VARIABLE gas_counter_version_gen_stdout
+  ERROR_VARIABLE gas_counter_version_gen_stderr
+)
+
+if(NOT "${gas_counter_version_gen_result}" STREQUAL "0")
+  message(STATUS "Version generator stdout: ${gas_counter_version_gen_stdout}")
+  message(STATUS "Version generator stderr: ${gas_counter_version_gen_stderr}")
+  message(FATAL_ERROR "Failed to generate gas counter version files")
+endif()
+
+list(APPEND EXTRA_CONF_FILE "${GAS_COUNTER_VERSION_CONF}")
 list(APPEND DTS_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(ZigbeeGasCounterNCS)
+
+target_include_directories(app PRIVATE
+  include
+  "${GAS_COUNTER_GENERATED_DIR}"
+)
 
 # NORDIC SDK APP START
 target_sources(app PRIVATE
