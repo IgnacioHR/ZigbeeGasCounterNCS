@@ -1,12 +1,13 @@
 /*
- * Copyright (c) 2024 Nordic Semiconductor ASA
+ * Zigbee Gas Counter - An open-source Zigbee gas counter project.
+ * Copyright (c) 2026 Ignacio Hernández-Ros.
  *
- * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
- */
-
-/** @file
+ * This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0
+ * International License. To view a copy of this license, visit
+ * https://creativecommons.org/licenses/by-nc-sa/4.0/
  *
- * @brief Zigbee application template.
+ * You may use, modify, and share this work for personal and non-commercial purposes, as long
+ * as you credit the original author(s) and share any derivatives under the same license.
  */
 
 #include <zephyr/kernel.h>
@@ -32,7 +33,6 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 // #include <dk_buttons_and_leds.h> // shall be removed when working with the seeedstudio. this is DK only
 
 #include "zb_features.h"
-#include "zb_range_extender.h"
 #include "zb_main_button.h"
 #include "zb_zigbee.h"
 #include "zb_main_loop.h"

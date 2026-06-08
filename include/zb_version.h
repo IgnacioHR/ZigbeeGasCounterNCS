@@ -1,8 +1,6 @@
-#pragma once
-
 /*
- * Zigbee Gas Meter - An open-source Zigbee gas meter project.
- * Copyright (c) 2025 Ignacio Hernández-Ros.
+ * Zigbee Gas Counter - An open-source Zigbee gas counter project.
+ * Copyright (c) 2026 Ignacio Hernández-Ros.
  *
  * This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0
  * International License. To view a copy of this license, visit
@@ -12,4 +10,5 @@
  * as you credit the original author(s) and share any derivatives under the same license.
  */
 
- #include <zb_version_generated.h>
+#pragma once
+#include <zb_version_generated.h>
