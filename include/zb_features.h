@@ -36,7 +36,7 @@
 // report the values (the counter) and goes to sleep again. This means it is not
 // likely the device will react to commands send from the user interface. But the
 // benefit is a extended battery life
-// #define FEATURE_DEEP_SLEEP								1
+#define FEATURE_DEEP_SLEEP								1
 
 // In LIGHT_SLEEP the ticks are reported more fulently to the coordinator and the
 // device can react to the user interface (the sleep window is set in 30 seconds)
