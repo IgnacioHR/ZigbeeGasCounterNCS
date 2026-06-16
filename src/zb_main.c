@@ -83,10 +83,13 @@ static int configure_gpio(int *main_button_level, int *reed_level)
 	err = reed_gpio_init(reed_level);
 	if (err < 0)
 		return err;
+
+#ifdef FEATURE_MEASURE_BATTERY_LEVEL
 	err = adc_gpio_init();
 	if (err < 0)
 		return err;
-	
+#endif
+
 	return 0;
 }
 
@@ -121,7 +124,9 @@ static void start_radio_and_report(bool main_button)
 {
 	main_loop_post(SHALL_ENABLE_ZIGBEE);
 	report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
+#ifdef FEATURE_DEEP_SLEEP
 	poweroff_mgr_user_window_extend(deep_sleep_eval_time_ms(main_button, !main_button));
+#endif
 }
 
 static void log_radio_not_needed_for_reed_inactive(uint64_t not_reported)
@@ -224,7 +229,9 @@ int main(void)
 	}
 
 	wakeup_cause = wakeup_cause_init();
+#ifdef FEATURE_DEEP_SLEEP
 	poweroff_mgr_enable_for_wakeup(wakeup_cause);
+#endif
 	// check for missing interrupts, happens if the user releases the button prior to setting up
 	// the interrupts
 	if (wakeup_cause == GM_WAKEUP_GPIO_MAIN_BTN_PRESS && main_button_level == 0) {
@@ -263,7 +270,9 @@ int main(void)
 		}
 	}
 
+#ifdef FEATURE_DEEP_SLEEP
 	poweroff_mgr_block_clear(POF_BLOCK_APP_NOT_READY);
 	poweroff_mgr_try_poweroff_now();
+#endif
 	return 0;
 }

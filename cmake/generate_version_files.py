@@ -26,11 +26,11 @@ def main():
 
     fota_endpoint = parse_int(data["zigbee"]["fota_endpoint"])
 
-    sign_version = str(data["software"]["imgtool_sign_version"])
     app_version = parse_int(data["software"]["app_version"])
     app_build = parse_int(data["software"]["app_build"])
     stack_version = parse_int(data["software"]["stack_version"])
     stack_build = parse_int(data["software"]["stack_build"])
+    sign_version = f"{app_version}.{app_build}.{stack_version}+{stack_build}"
     sw_build_id = str(data["software"]["sw_build_id"])
 
     product_label = str(data["product"]["label"])

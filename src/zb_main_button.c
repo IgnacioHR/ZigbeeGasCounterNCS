@@ -96,6 +96,7 @@ int main_button_read_stable_level(void)
 	return gpio_read_stable_level(&main_button, 5, K_MSEC(10));
 }
 
+#ifdef FEATURE_DEEP_SLEEP
 /**
  * @brief Safe way to set this property from other threads
  * 
@@ -105,6 +106,7 @@ void set_started_from_deep_sleep(bool value)
 {
 	atomic_set(&started_from_deep_sleep, false);
 }
+#endif
 
 /**
  * @brief Callback from the ISR the main button has been pressed or released
@@ -121,8 +123,8 @@ static void main_button_isr_cb(const struct device *dev, struct gpio_callback *c
 
 	static int64_t last_main_btn_time_ms;
 
-	const int64_t now_ms = k_uptime_get();
-	const int64_t diff_ms = now_ms - last_main_btn_time_ms;
+	int64_t now = k_uptime_get();
+	const int64_t diff_ms = now - last_main_btn_time_ms;
 
 	if ((last_main_btn_time_ms > 0) && (diff_ms <= BTN_DEBOUNCE_TIMEOUT)) {
 		return;
@@ -144,7 +146,7 @@ static void main_button_isr_cb(const struct device *dev, struct gpio_callback *c
 		k_sem_give(&btn_release_sem);
 	}
 
-	last_main_btn_time_ms = now_ms;
+	last_main_btn_time_ms = now;
 
 #ifdef CONFIG_DEBUG
 	gpio_pin_set_dt(&led_main_button, level);

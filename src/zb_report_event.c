@@ -60,11 +60,6 @@ static uint8_t report_internal_event_mask(void)
 	return mask;
 }
 
-static void report_event_re_schedule_events_cb(uint8_t param) 
-{
-
-}
-
 static void report_event_task(void *p1, void *p2, void *p3)
 {
 	ARG_UNUSED(p1);
@@ -82,20 +77,28 @@ static void report_event_task(void *p1, void *p2, void *p3)
 		if (!is_leaving_network() && ZB_JOINED()) {
 			zb_zcl_status_t status;
 			if (events & mask_out) {
+#ifdef FEATURE_DEEP_SLEEP
 				poweroff_mgr_zigbee_tx_begin();
+#endif
 				status = radio_report_values(events);
 				if (status == ZB_ZCL_STATUS_SUCCESS) {
 					status = radio_send_values(events);
+#ifdef FEATURE_DEEP_SLEEP
 				} else {
 					poweroff_mgr_zigbee_tx_done();
+#endif
 				}
 			}
 			if (events & mask_in) {
+#ifdef FEATURE_DEEP_SLEEP
 				poweroff_mgr_zigbee_rx_begin();
+#endif
 				status = radio_request_values(events);
+#ifdef FEATURE_DEEP_SLEEP
 				if (status != ZB_ZCL_STATUS_SUCCESS) {
 					poweroff_mgr_zigbee_rx_done();
 				}
+#endif
 			}
 			if (events & mask_internal) {
 				if (events & REPORT_NEW_TIME_ADQUIRED) {
@@ -107,11 +110,14 @@ static void report_event_task(void *p1, void *p2, void *p3)
 #endif
 				}
 			}
-			#ifdef FEATURE_DEEP_SLEEP
+#ifdef FEATURE_DEEP_SLEEP
 			poweroff_mgr_user_window_extend(deep_sleep_eval_time_ms(false, false));
-			#endif
+#endif
 		} else {
-			zb_schedule_app_alarm((zb_callback_t)report_event_re_schedule_events_cb,events, 1000);
+#ifdef FEATURE_DEEP_SLEEP
+			poweroff_mgr_user_window_extend(1200);
+#endif
+			zb_schedule_app_alarm((zb_callback_t)report_event_post, events, 1000);
 			LOG_WRN("Events re-scheduled %d", events);
 		}
 	}

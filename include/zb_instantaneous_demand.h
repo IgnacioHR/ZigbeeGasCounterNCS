@@ -12,22 +12,13 @@
 
 #pragma once
 
-#ifndef ZB_MAIN_BUTTON_H
-#define ZB_MAIN_BUTTON_H
+#ifndef ZB_INSTANTANEOUS_DEMAND_H
+#define ZB_INSTANTANEOUS_DEMAND_H
 
-#include "zb_features.h"
+#ifdef FEATURE_MEASURE_FLOW_RATE
 
-int main_button_gpio_init(int *level);
-void main_button_start(void);
-int main_button_get_level(void);
-int main_button_gpio_wakeup(void);
-void main_button_fire_press(void);
-void main_button_fire_release(void);
-int main_button_read_early_level(void);
-int main_button_read_stable_level(void);
+void zb_compute_instantaneous_demand();
 
-#ifdef FEATURE_DEEP_SLEEP
-void set_started_from_deep_sleep(bool value);
-#endif
+#endif // FEATURE_MEASURE_FLOW_RATE
 
-#endif
+#endif // ZB_INSTANTANEOUS_DEMAND_H

@@ -23,6 +23,8 @@
 #include <zb_zcl_power_config.h>
 #include <zb_zcl_ota_upgrade.h>
 
+#include "zb_features.h"
+
 #define HW_MANUFACTURER_CODE            0x8888
 #define GAS_METER_ENDPOINT                   1
 #define GAS_METER_DEVICE_VER                 0
@@ -64,8 +66,15 @@ bool is_leaving_network(void);
 void leave_action(void);
 uint32_t get_current_time(void);
 uint32_t get_old_time(void);
+#ifdef FEATURE_MEASURE_BATTERY_LEVEL
 void set_battery_voltage_mv(int32_t voltage_mv);
 void set_battery_unavailable(void);
+#endif
+
+#ifdef FEATURE_MEASURE_FLOW_RATE
+int32_t get_instantaneous_demand(void);
+void set_instantaneous_demand(int32_t value);
+#endif
 
 typedef struct {
     zb_zcl_basic_attrs_ext_t base;

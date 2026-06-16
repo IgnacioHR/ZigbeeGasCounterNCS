@@ -64,18 +64,13 @@ int reed_read_stable_level(void)
 	return gpio_read_stable_level(&reed_input, 5, K_MSEC(10));
 }
 
-static int64_t now_ms(void)
-{
-	return k_uptime_get();
-}
-
 static int64_t elapsed_ms_since(int64_t previous_ms)
 {
 	if (previous_ms == 0) {
 		return INT64_MAX;
 	}
 
-	return now_ms() - previous_ms;
+	return k_uptime_get() - previous_ms;
 }
 
 static bool reed_process_interrupt(void)
@@ -89,7 +84,7 @@ static bool reed_process_interrupt(void)
 		return false;
 	}
 
-	last_interrupt_time_ms = now_ms();
+	last_interrupt_time_ms = k_uptime_get();
 
 	bool is_ok = (last_reed_state_change_time_ms == 0);
 	if (!is_ok) {
@@ -98,7 +93,7 @@ static bool reed_process_interrupt(void)
 	}
 
 	if (is_ok) {
-		last_reed_state_change_time_ms = now_ms();
+		last_reed_state_change_time_ms = k_uptime_get();
 		increment = true;
 	}
 
@@ -144,9 +139,13 @@ static void reed_thread(void *p1, void *p2, void *p3)
 	LOG_DBG("Reed thread started");
 	while (true) {
 		k_sem_take(&reed_sem, K_FOREVER);
+#ifdef FEATURE_DEEP_SLEEP
 		poweroff_mgr_block_set(POF_BLOCK_COUNTER);
+#endif
 		check_counter_increment();
+#ifdef FEATURE_DEEP_SLEEP
 		poweroff_mgr_block_clear(POF_BLOCK_COUNTER);
+#endif
 	}
 }
 static K_THREAD_DEFINE(reed_tid, REED_THREAD_STACK_SIZE, reed_thread, NULL, NULL, NULL, REED_THREAD_PRIORITY, 0, K_TICKS_FOREVER);

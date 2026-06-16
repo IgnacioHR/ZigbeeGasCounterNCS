@@ -26,6 +26,10 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 #include "zb_nvr.h"
 #include "zb_deep_sleep.h"
 
+#ifdef FEATURE_MEASURE_FLOW_RATE
+#include "zb_instantaneous_demand.h"
+#endif
+
 #include <zboss_api.h>
 #include <zigbee/zigbee_error_handler.h>
 #include <zigbee/zigbee_app_utils.h>
@@ -41,8 +45,9 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 
 /* LED used for device identification. */
 // #define IDENTIFY_LED                        DK_LED4
-
+#ifdef FEATURE_MEASURE_BATTERY_LEVEL
 #define TO_PERCENTAGE           (double)(200.0 / ((double)MAX_BATTERY_VOLTAGE - (double)MIN_BATTERY_VOLTAGE))
+#endif
 
 // #define RADIO_NODE DT_NODELABEL(radio)
 // static const struct device *radio = DEVICE_DT_GET(RADIO_NODE);
@@ -174,9 +179,10 @@ static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(power_attr_list, ZB_ZCL
 
 /**
  * @brief ZB_ZCL_METERING Cluster
- * 
+ *        There are 4 possibilities here and all 4 has to be written explicitly as
+ *        we are using macros to build the content
  */
-#ifdef FEATURE_MEASURE_FLOW_RATE
+#if defined(FEATURE_MEASURE_FLOW_RATE) && defined(FEATURE_WRITE_COUNTER_VALUE)
 static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(metering_attr_list, ZB_ZCL_METERING) \
     ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID, (&dev_ctx.metering_attr.base.curr_summ_delivered)) \
     ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_STATUS_ID, (&dev_ctx.metering_attr.base.status)) \
@@ -199,7 +205,26 @@ static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(metering_attr_list, ZB_
       (void*)(&dev_ctx.metering_attr.base.curr_summ_delivered) \
     }, \
     ZB_ZCL_FINISH_DECLARE_ATTRIB_LIST;
-#else
+#endif
+#if defined(FEATURE_MEASURE_FLOW_RATE) && !defined(FEATURE_WRITE_COUNTER_VALUE)
+static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(metering_attr_list, ZB_ZCL_METERING) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID, (&dev_ctx.metering_attr.base.curr_summ_delivered)) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_STATUS_ID, (&dev_ctx.metering_attr.base.status)) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_UNIT_OF_MEASURE_ID, (&dev_ctx.metering_attr.base.unit_of_measure)) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_SUMMATION_FORMATTING_ID, (&dev_ctx.metering_attr.base.summation_formatting)) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_METERING_DEVICE_TYPE_ID, (&dev_ctx.metering_attr.base.device_type)) \
+    ZB_ZCL_SET_ATTR_DESC_M( \
+    ZB_ZCL_ATTR_METERING_EXTENDED_STATUS_ID, \
+    &dev_ctx.metering_attr.device_extended_status, \
+    ZB_ZCL_ATTR_TYPE_64BITMAP, \
+    ZB_ZCL_ATTR_ACCESS_READ_ONLY | ZB_ZCL_ATTR_ACCESS_REPORTING) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_MULTIPLIER_ID, (&dev_ctx.metering_attr.multiplier)) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_DIVISOR_ID, (&dev_ctx.metering_attr.divisor)) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_INSTANTANEOUS_DEMAND_ID, (&dev_ctx.metering_attr.instantaneous_demand)) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_DEMAND_FORMATTING_ID, (&dev_ctx.metering_attr.demand_formatting)) \
+    ZB_ZCL_FINISH_DECLARE_ATTRIB_LIST;
+#endif
+#if !defined(FEATURE_MEASURE_FLOW_RATE) && defined(FEATURE_WRITE_COUNTER_VALUE)
 static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(metering_attr_list, ZB_ZCL_METERING) \
     ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID, (&dev_ctx.metering_attr.base.curr_summ_delivered)) \
     ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_STATUS_ID, (&dev_ctx.metering_attr.base.status)) \
@@ -219,6 +244,22 @@ static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(metering_attr_list, ZB_
       ZB_ZCL_MANUFACTURER_SPECIFIC, \
       (void*)(&dev_ctx.metering_attr.base.curr_summ_delivered) \
     }, \
+    ZB_ZCL_FINISH_DECLARE_ATTRIB_LIST;
+#endif
+#if !defined(FEATURE_MEASURE_FLOW_RATE) && !defined(FEATURE_WRITE_COUNTER_VALUE)
+static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(metering_attr_list, ZB_ZCL_METERING) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID, (&dev_ctx.metering_attr.base.curr_summ_delivered)) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_STATUS_ID, (&dev_ctx.metering_attr.base.status)) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_UNIT_OF_MEASURE_ID, (&dev_ctx.metering_attr.base.unit_of_measure)) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_SUMMATION_FORMATTING_ID, (&dev_ctx.metering_attr.base.summation_formatting)) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_METERING_DEVICE_TYPE_ID, (&dev_ctx.metering_attr.base.device_type)) \
+    ZB_ZCL_SET_ATTR_DESC_M( \
+        ZB_ZCL_ATTR_METERING_EXTENDED_STATUS_ID, \
+        &dev_ctx.metering_attr.device_extended_status, \
+        ZB_ZCL_ATTR_TYPE_64BITMAP, \
+        ZB_ZCL_ATTR_ACCESS_READ_ONLY | ZB_ZCL_ATTR_ACCESS_REPORTING) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_MULTIPLIER_ID, (&dev_ctx.metering_attr.multiplier)) \
+    ZB_ZCL_SET_ATTR_DESC(ZB_ZCL_ATTR_METERING_DIVISOR_ID, (&dev_ctx.metering_attr.divisor)) \
     ZB_ZCL_FINISH_DECLARE_ATTRIB_LIST;
 #endif
 
@@ -281,6 +322,15 @@ static zb_zcl_cluster_desc_t gas_meter_cluster_list[] = {
     )
 };
 
+/**
+ * @brief This value depends on the features enabled/disabled
+ *        and adjusting this value is tricky. 
+ *        This value can't be calculated so it must be right in the source code.
+ *        In case of compilation errors, this value must equal the sum of
+ *        MY_ZB_ZCL_POWER_CONFIG_REPORT_ATTR_COUNT and MY_ZB_ZCL_METERING_REPORT_ATTR_COUNT
+ *        I use VSCode while holding the mouse over the defines and calculate the proper value.
+ *        
+ */
 #define GAS_NUMBER_REPORTING_ATTRIBUTES 6
 
 BUILD_ASSERT(
@@ -446,6 +496,7 @@ uint32_t get_old_time(void)
     return old_zcl_time;
 }
 
+#ifdef FEATURE_MEASURE_BATTERY_LEVEL
 /**
  * @brief Set the battery voltage mv and updates all power attributes
  *        accordingly
@@ -494,6 +545,7 @@ void set_battery_unavailable(void)
     dev_ctx.power_config_attr.battery_alarm_state |= ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_UNAVAIL;
     report_event_post(REPORT_BATTERY);
 }
+#endif
 
 /**
  * @brief Access to the current time in seconds since
@@ -511,6 +563,28 @@ uint32_t get_current_time(void)
     int64_t elapsed = now - last_sync_uptime_ms;
     return last_zcl_time + (elapsed / 1000);
 }
+
+#ifdef FEATURE_MEASURE_FLOW_RATE
+/**
+ * @brief Get the instantaneous demand value as int32_t
+ * 
+ * @return int32_t 
+ */
+int32_t get_instantaneous_demand(void)
+{
+    return zb_int24_to_int32(&dev_ctx.metering_attr.instantaneous_demand);
+}
+
+/**
+ * @brief Set the instantaneous demand value from int32_t
+ * 
+ * @param value 
+ */
+void set_instantaneous_demand(int32_t value)
+{
+    zb_int32_to_int24(value, &dev_ctx.metering_attr.instantaneous_demand);
+}
+#endif
 
 /**
  * @brief Get the current summ value as an uint64 to be saved to NVRAM
@@ -534,6 +608,10 @@ void zb_counter_increment(void)
     }
     report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
     nvr_schedule_save(NVR_ITEM_COUNTER);
+
+#ifdef FEATURE_MEASURE_FLOW_RATE
+    zb_compute_instantaneous_demand();
+#endif
 }
 
 static void zb_counter_set(zb_uint48_t value)
@@ -627,7 +705,7 @@ void app_device_ctx_init(void)
     dev_ctx.metering_attr.divisor = (zb_uint24_t){.high=0,.low=100};
     dev_ctx.metering_attr.multiplier = (zb_uint24_t){.high=0,.low=1};
 #ifdef FEATURE_MEASURE_FLOW_RATE
-    dev_ctx.metering_attr.instantaneous_demand = (zb_uint24_t){.high=0,.low=0};
+    dev_ctx.metering_attr.instantaneous_demand = (zb_int24_t){.high=0,.low=0};
     dev_ctx.metering_attr.demand_formatting = ZB_ZCL_METERING_FORMATTING_SET(true, 2, 3);
 #endif
 
@@ -913,6 +991,11 @@ static void zcl_device_cb(zb_bufid_t bufid)
 	zb_uint16_t attr_id;
 	zb_zcl_device_callback_param_t  *device_cb_param = ZB_BUF_GET_PARAM(bufid, zb_zcl_device_callback_param_t);
 
+    zigbee_fota_zcl_cb(bufid);
+    if (device_cb_param->device_cb_id == ZB_ZCL_OTA_UPGRADE_VALUE_CB_ID) {
+        return;
+    }
+
 	LOG_INF("%s id %hd", __func__, device_cb_param->device_cb_id);
 
 	/* Set default response value. */
@@ -1011,10 +1094,15 @@ static void fota_evt_handler(const struct zigbee_fota_evt *evt)
 	switch (evt->id) {
 	case ZIGBEE_FOTA_EVT_PROGRESS:
 		LOG_INF("Zigbee FOTA progress");
+#ifdef FEATURE_DEEP_SLEEP
         poweroff_mgr_block_set(POF_BLOCK_OTA);
+#endif
 		break;
 	case ZIGBEE_FOTA_EVT_FINISHED:
+#ifdef FEATURE_DEEP_SLEEP
+        poweroff_mgr_user_window_extend(500);
 		poweroff_mgr_block_clear(POF_BLOCK_OTA);
+#endif
 		LOG_INF("Zigbee FOTA finished, reboot required");
 #if (IS_ENABLED(CONFIG_LOG))
         log_panic();
@@ -1024,7 +1112,10 @@ static void fota_evt_handler(const struct zigbee_fota_evt *evt)
 		break;
 	case ZIGBEE_FOTA_EVT_ERROR:
 		LOG_ERR("Zigbee FOTA error");
+#ifdef FEATURE_DEEP_SLEEP
+        poweroff_mgr_user_window_extend(500);
         poweroff_mgr_block_clear(POF_BLOCK_OTA);
+#endif
 		break;
 	default:
 		LOG_WRN("Unknown Zigbee FOTA evt=%d", evt->id);
@@ -1068,9 +1159,6 @@ void zboss_signal_handler(zb_bufid_t bufid)
         case ZB_BDB_SIGNAL_DEVICE_FIRST_START:
         case ZB_BDB_SIGNAL_DEVICE_REBOOT:
             if (status == 0) {
-#ifdef FEATURE_LIGHT_SLEEP
-                gettimeofday(&time_commisioning_started, NULL);
-#endif
                 LOG_INF("Device started up in%s factory-reset mode", zb_bdb_is_factory_new() ? "" : " non");
                 if (zb_bdb_is_factory_new()) {
                     LOG_INF("Start network steering from factory new");
@@ -1091,9 +1179,6 @@ void zboss_signal_handler(zb_bufid_t bufid)
             }
             break;
         case ZB_BDB_SIGNAL_STEERING:
-            #ifdef FEATURE_LIGHT_SLEEP
-            gettimeofday(&time_commisioning_started, NULL);
-            #endif
             if (status == 0) {
                 LOG_INF("Signal steering successful");
                 zb_ieee_addr_t extended_pan_id;
@@ -1127,7 +1212,9 @@ void zboss_signal_handler(zb_bufid_t bufid)
         case ZB_SIGNAL_JOIN_DONE:
             LOG_INF("Zigbee join done");
             report_event_post(REPORT_REQUEST_TIMING);
+#ifdef FEATURE_DEEP_SLEEP
             poweroff_mgr_user_window_extend(10000);
+#endif
             skip_default = true;
             break;
         case ZB_ZDO_DEVICE_UNAVAILABLE:
@@ -1279,23 +1366,52 @@ static zb_uint8_t zcl_endpoint_cb(zb_bufid_t bufid)
 
 #include "zb_deep_sleep.h"
 
+/**
+ * @brief The implementation of the basic cluster on the OTA endpoint does not match the
+ *        one we have in our end point so we need to point it to ours.
+ * 
+ */
+static void fix_ota_basic_ep(void)
+{
+    zb_af_endpoint_desc_t *ota_ep = zb_af_get_endpoint_desc(CONFIG_ZIGBEE_FOTA_ENDPOINT);
+    if (ota_ep == NULL) {
+        LOG_ERR("OTA EP is null");
+        return;
+    }
+    zb_af_endpoint_desc_t *gas_meter_ep = zb_af_get_endpoint_desc(GAS_METER_ENDPOINT);
+    if (gas_meter_ep == NULL) {
+        LOG_ERR("GAS METER EP is null");
+        return;
+    }
+    zb_zcl_cluster_desc_t *ota_basic_cluster = get_cluster_desc(ota_ep, ZB_ZCL_CLUSTER_ID_BASIC, ZB_ZCL_CLUSTER_SERVER_ROLE);
+    if (ota_basic_cluster == NULL) {
+        LOG_ERR("OTA BASIC CLUSTER is null");
+        return;
+    }
+    zb_zcl_cluster_desc_t *gas_basic_cluster = get_cluster_desc(gas_meter_ep, ZB_ZCL_CLUSTER_ID_BASIC, ZB_ZCL_CLUSTER_SERVER_ROLE);
+    if (gas_basic_cluster == NULL) {
+        LOG_ERR("GAS BASIC CLUSTER is null");
+        return;
+    }
+    ota_basic_cluster->attr_count = gas_basic_cluster->attr_count;
+    ota_basic_cluster->attr_desc_list = gas_basic_cluster->attr_desc_list;
+    ota_basic_cluster->manuf_code = gas_basic_cluster->manuf_code;
+}
+
 static void zb_task(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1);
 	ARG_UNUSED(p2);
 	ARG_UNUSED(p3);
 
-    // int err = device_init(radio);
-    // if (err && err != -EALREADY) {
-    //     LOG_ERR("device_init(radio) failed: %d", err);
-    //     return;
-    // }
     LOG_INF("Configuring zigbee device");
 
     app_zigbee_fota_init();
 
 	/* Register device context (endpoints). */
 	ZB_AF_REGISTER_DEVICE_CTX(&gas_meter_ctx);
+
+    fix_ota_basic_ep();
 
 #ifdef FEATURE_LIGHT_SLEEP
     // zb_sleep_enable(true);

@@ -200,9 +200,11 @@ static bool pending_report_take(zb_bufid_t bufid, struct pending_report_ctx *out
 		}
 	}
 	k_mutex_unlock(&pending_reports_lock);
-	
+
+#ifdef FEATURE_DEEP_SLEEP
 	if (!more_pending)
 		poweroff_mgr_zigbee_tx_done();
+#endif
 
 	return found;
 }
@@ -460,7 +462,9 @@ static void time_read_attr_send_cb(zb_uint8_t param)
 	if (param) {
 		zb_buf_free(param);
 	}
+#ifdef FEATURE_DEEP_SLEEP
 	poweroff_mgr_zigbee_rx_done();
+#endif
 }
 
 static void time_server_start_search_cb(zb_uint8_t param)
@@ -496,7 +500,9 @@ static void time_server_start_search_cb(zb_uint8_t param)
          ZB_AF_HA_PROFILE_ID, (ZB_ZCL_CLUSTER_ID_TIME), time_read_attr_send_cb);
   } else if (resp->status == ZB_ZDP_STATUS_TIMEOUT) {
 		if (num_time_servers_found == 0) {
+#ifdef FEATURE_DEEP_SLEEP
 			poweroff_mgr_zigbee_rx_done();
+#endif
 		}
 	} else {
 		LOG_ERR("Time server found cb ERROR (err: %d)",resp->status);

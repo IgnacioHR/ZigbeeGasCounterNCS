@@ -1,12 +1,11 @@
 {
   "manufacturer_id": "0x8888",
-  "image_type": "0x1011",
+  "image_type": "0x1010",
   "hardware": {
     "version": "0x01",
     "ota_hw_version": "0x0101"
   },
   "software": {
-    "imgtool_sign_version": "1.1.1",
     "app_version": 1,
     "app_build": 1,
     "stack_version": 1,

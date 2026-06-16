@@ -84,11 +84,17 @@ static int deep_sleep_watchdog_init(uint32_t timeout_ms)
 	return 0;
 }
 
-/**
- * @brief evaluates the new time to enter sleep based on internal status
- * 
- * @return k_timeout_t 
- */
+ /**
+  * @brief evaluates the new time to enter sleep based on internal status
+	*        if param `other_startup` is true it takes preference and returns TIME_TO_SLEEP_ZIGBEE_STARTING_MS
+	*        if param `main_button_pressed` is true (and param other_startup is false) returns TIME_TO_SLEEP_USER_WAKE_UP
+	*        if both parameters are false, then the return value depends on the zigbee radio is started or not. If started
+	*        the return value is TIME_TO_SLEEP_ZIGBEE_ON_MS otherwise it is TIME_TO_SLEEP_ZIGBEE_OFF_MS
+  * 
+  * @param main_button_pressed true if this function is called due to the main button pressed
+  * @param other_startup true if the device just started up due to a reason other then the main button pressed
+  * @return int64_t 
+  */
 int64_t deep_sleep_eval_time_ms(bool main_button_pressed, bool other_startup)
 {
 	if (other_startup) {
@@ -133,15 +139,9 @@ K_THREAD_STACK_DEFINE(poweroff_stack, POWEROFF_THREAD_STACK_SIZE);
 static struct k_thread poweroff_thread_data;
 static k_tid_t poweroff_tid;
 
-
-static int64_t now_ms(void)
-{
-	return k_uptime_get();
-}
-
 static int32_t delay_until_ms(int64_t deadline)
 {
-	int64_t now = now_ms();
+	int64_t now = k_uptime_get();
 
 	if (deadline <= now) {
 		return 0;
@@ -164,7 +164,7 @@ static void poweroff_evaluate(bool *should_poweroff, int64_t *next_deadline, uin
 	*should_poweroff = false;
 	*next_deadline = 0;
 	
-	now = now_ms();
+	now = k_uptime_get();
 
 	key = k_spin_lock(&pof_lock);
 
@@ -450,7 +450,7 @@ void poweroff_mgr_user_window_open(int32_t timeout_ms)
 	k_spinlock_key_t key;
 	poweroff_mgr_ensure_policy_initialized();
 
-	deadline = now_ms() + timeout_ms;
+	deadline = k_uptime_get() + timeout_ms;
 
 	key = k_spin_lock(&pof_lock);
 	user_window_until_ms = deadline;
@@ -478,11 +478,11 @@ void poweroff_mgr_user_window_extend(int32_t timeout_ms)
 	poweroff_mgr_ensure_policy_initialized();
 
 	key = k_spin_lock(&pof_lock);
-	remaining = user_window_until_ms - now_ms();
+	remaining = user_window_until_ms - k_uptime_get();
 	if (remaining < 0)
 		remaining = 0;
 	if (remaining < timeout_ms)
-		user_window_until_ms = now_ms() + timeout_ms;
+		user_window_until_ms = k_uptime_get() + timeout_ms;
 	atomic_or(&blockers, POF_BLOCK_USER_WINDOW);
 	k_spin_unlock(&pof_lock, key);
 
@@ -567,7 +567,7 @@ void poweroff_mgr_enable_for_wakeup(gm_wakeup_cause_t reason)
 	int64_t now;
 
 	poweroff_mgr_ensure_policy_initialized();
-	now = now_ms();
+	now = k_uptime_get();
 	key = k_spin_lock(&pof_lock);
 
 	switch (reason) {

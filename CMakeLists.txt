@@ -66,6 +66,7 @@ target_sources(app PRIVATE
   src/zb_radio.c
   src/zb_boot_snapshot.c
   src/zb_gpio_stable.c
+  src/zb_instantaneous_demand.c
 )
 
 target_include_directories(app PRIVATE include)

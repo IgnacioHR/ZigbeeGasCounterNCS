@@ -300,7 +300,9 @@ int nvr_wait_loaded(k_timeout_t timeout)
  */
 void nvr_schedule_save(uint32_t nvr_items_mask)
 {
+#ifdef FEATURE_DEEP_SLEEP
 	poweroff_mgr_block_set(POF_BLOCK_SAVE_NVS);
+#endif
 	k_mutex_lock(&nvr_mutex, K_FOREVER);
 	nvr_dirty_mask |= nvr_items_mask;
 	k_mutex_unlock(&nvr_mutex);
