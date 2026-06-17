@@ -21,7 +21,6 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/sys/poweroff.h>
 #include <zephyr/sys/reboot.h>
-#include <zephyr/dfu/mcuboot.h>
 
 #include <zboss_api.h>
 
@@ -44,6 +43,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #include "zb_reed.h"
 #include "zb_deep_sleep.h"
 #include "zb_xiao.h"
+#include "zb_ota.h"
 
 /* Device endpoint, used to receive ZCL commands. */
 #define APP_TEMPLATE_ENDPOINT               10
@@ -169,17 +169,6 @@ static bool is_reed_wakeup_cause(gm_wakeup_cause_t wakeup_cause)
 	return wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE || wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_ACTIVE;
 }
 
-static bool check_new_ota_image()
-{
-	if (!boot_is_img_confirmed()) {
-#ifdef FEATURE_DEEP_SLEEP		
-		poweroff_mgr_block_set(POF_BLOCK_OTA_CONFIRM);
-#endif
-		return false;
-	}
-	return true;
-}
-
 int poweroff(void) {
 	int err;
 	err = retained_set_boot_to_system_off(false);
@@ -222,9 +211,9 @@ int main(void)
 	}
 
 	// app_confirm_mcuboot_image();
-	bool new_image_confirmed = check_new_ota_image();
+	bool ota_new_image = ota_is_new_image();
 
-	if (new_image_confirmed && retained_shall_power_off()) {
+	if (!ota_new_image && retained_shall_power_off()) {
 		LOG_DBG("Requesting WDT reset before system_off path");
 		err = poweroff();
 		if (err != 0) {
@@ -270,7 +259,7 @@ int main(void)
 	if (!is_reed_wakeup_cause(wakeup_cause)) {
  		main_button_start();
 	}
-	if (new_image_confirmed) {
+	if (!ota_new_image) {
 		check_shall_enable_radio(wakeup_cause, b_missed_reed);
 	} else {
 		start_radio_and_report(true);

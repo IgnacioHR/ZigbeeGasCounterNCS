@@ -26,6 +26,7 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 #include "zb_nvr.h"
 #include "zb_deep_sleep.h"
 #include "zb_led.h"
+#include "zb_ota.h"
 
 #ifdef FEATURE_MEASURE_FLOW_RATE
 #include "zb_instantaneous_demand.h"
@@ -38,7 +39,6 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 #include <zb_nrf_platform.h>
 #include <zephyr/logging/log_ctrl.h>
 #include <zephyr/sys/reboot.h>
-#include <zephyr/dfu/mcuboot.h>
 
 #define ZIGBEE_TASK_STACK_SIZE              10240
 #define ZIGBEE_TASK_PRIORITY                   10
@@ -1221,7 +1221,7 @@ void zboss_signal_handler(zb_bufid_t bufid)
 #ifdef FEATURE_DEEP_SLEEP
             poweroff_mgr_user_window_extend(10000);
 #endif
-            if (!boot_is_img_confirmed()) {
+            if (ota_is_new_image()) {
                 main_loop_post(SHALL_CONFIRM_OTA);
             }
             skip_default = true;

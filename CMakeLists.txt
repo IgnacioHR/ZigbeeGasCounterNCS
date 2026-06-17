@@ -68,6 +68,7 @@ target_sources(app PRIVATE
   src/zb_gpio_stable.c
   src/zb_instantaneous_demand.c
   src/zb_led.c
+  src/zb_ota.c
 )
 
 target_include_directories(app PRIVATE include)
