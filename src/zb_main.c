@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/sys/poweroff.h>
 #include <zephyr/sys/reboot.h>
+#include <zephyr/dfu/mcuboot.h>
 
 #include <zboss_api.h>
 
@@ -30,7 +31,6 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #include <zb_nrf_platform.h>
 #include <hal/nrf_power.h>
 #include <ram_pwrdn.h>
-// #include <dk_buttons_and_leds.h> // shall be removed when working with the seeedstudio. this is DK only
 
 #include "zb_features.h"
 #include "zb_main_button.h"
@@ -86,6 +86,11 @@ static int configure_gpio(int *main_button_level, int *reed_level)
 
 #ifdef FEATURE_MEASURE_BATTERY_LEVEL
 	err = adc_gpio_init();
+	if (err < 0)
+		return err;
+#endif
+#if HAS_XIAO_RGB_LED && IS_ENABLED(CONFIG_DEBUG)
+	err = xiao_leds_init();
 	if (err < 0)
 		return err;
 #endif
@@ -164,6 +169,25 @@ static bool is_reed_wakeup_cause(gm_wakeup_cause_t wakeup_cause)
 	return wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE || wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_ACTIVE;
 }
 
+static void app_confirm_mcuboot_image(void)
+{
+    int err;
+
+    if (boot_is_img_confirmed()) {
+        return;
+    }
+
+    LOG_WRN("MCUboot image is not confirmed, confirming now");
+
+    err = boot_write_img_confirmed();
+    if (err != 0) {
+        LOG_ERR("Failed to confirm MCUboot image: %d", err);
+        return;
+    }
+
+    LOG_INF("MCUboot image confirmed");
+}
+
 int poweroff(void) {
 	int err;
 	err = retained_set_boot_to_system_off(false);
@@ -204,6 +228,8 @@ int main(void)
 	if (IS_ENABLED(CONFIG_RAM_POWER_DOWN_LIBRARY)) {
 		power_down_unused_ram();
 	}
+
+	app_confirm_mcuboot_image();
 
 	if (retained_shall_power_off()) {
 		LOG_DBG("Requesting WDT reset before system_off path");

@@ -2,6 +2,7 @@
 
 import argparse
 import json
+from datetime import datetime
 
 def parse_int(value):
     if isinstance(value, int):
@@ -31,9 +32,13 @@ def main():
     stack_version = parse_int(data["software"]["stack_version"])
     stack_build = parse_int(data["software"]["stack_build"])
     sign_version = f"{app_version}.{app_build}.{stack_version}+{stack_build}"
-    sw_build_id = str(data["software"]["sw_build_id"])
+    sw_build_id = f"V{app_version}.{app_build}"
 
     product_label = str(data["product"]["label"])
+
+    now = datetime.now()
+
+    date_code = f"{now.year:04}{now.month:02}{now.day:02}"
 
     with open(args.out_conf, "w", encoding="utf-8") as f:
         f.write("# Generated file. Do not edit.\n")
@@ -49,6 +54,7 @@ def main():
         f.write(f"#define OTA_UPGRADE_HW_VERSION          0x{ota_hw_version:04x}\n")
         f.write(f"#define OTA_UPGRADE_IMAGE_TYPE          0x{image_type:04x}\n\n")
         f.write(f"#define HARDWARE_VERSION                0x{hw_version:02x}\n\n")
+        f.write(f"#define ZB_DATE_CODE                    {json.dumps(date_code)}\n")
         f.write(f"#define APP_BUILD                       {app_build}\n")
         f.write(f"#define APP_VERSION                     {app_version}\n")
         f.write(f"#define STACK_VERSION                   {stack_version}\n")

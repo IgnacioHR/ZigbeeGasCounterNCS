@@ -11,6 +11,9 @@
         batt-divider-en = &batt_divider_en;
         watchdog0 = &wdt0;
         xiao-read-bat-enable = &xiao_battery_frontend;
+        xiao-led-red = &led0;
+        xiao-led-green = &led1;
+        xiao-led-blue = &led2;
     };
 
     app_gpios {

@@ -25,6 +25,7 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 #include "zb_main_loop.h"
 #include "zb_nvr.h"
 #include "zb_deep_sleep.h"
+#include "zb_led.h"
 
 #ifdef FEATURE_MEASURE_FLOW_RATE
 #include "zb_instantaneous_demand.h"
@@ -241,7 +242,7 @@ static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(metering_attr_list, ZB_
     { GAS_METER_ATTR_SET_SUMMATION_ID, \
       ZB_ZCL_ATTR_TYPE_U48, \
       ZB_ZCL_ATTR_ACCESS_READ_WRITE | ZB_ZCL_ATTR_MANUF_SPEC, \
-      ZB_ZCL_MANUFACTURER_SPECIFIC, \
+      HW_MANUFACTURER_CODE, \
       (void*)(&dev_ctx.metering_attr.base.curr_summ_delivered) \
     }, \
     ZB_ZCL_FINISH_DECLARE_ATTRIB_LIST;
@@ -636,16 +637,16 @@ void app_device_ctx_init(void)
     dev_ctx.basic_attr.base.hw_version = HARDWARE_VERSION;
     ZB_ZCL_SET_STRING_VAL(
 		dev_ctx.basic_attr.base.mf_name,
-		ESP_MANUFACTURER_NAME,
-		ZB_ZCL_STRING_CONST_SIZE(ESP_MANUFACTURER_NAME));
+		ZB_MANUFACTURER_NAME,
+		ZB_ZCL_STRING_CONST_SIZE(ZB_MANUFACTURER_NAME));
     ZB_ZCL_SET_STRING_VAL(
 		dev_ctx.basic_attr.base.model_id,
-		ESP_MODEL_IDENTIFIER,
-		ZB_ZCL_STRING_CONST_SIZE(ESP_MODEL_IDENTIFIER));
+		ZB_MODEL_IDENTIFIER,
+		ZB_ZCL_STRING_CONST_SIZE(ZB_MODEL_IDENTIFIER));
     ZB_ZCL_SET_STRING_VAL(
 		dev_ctx.basic_attr.base.date_code,
-		ESP_DATE_CODE,
-		ZB_ZCL_STRING_CONST_SIZE(ESP_DATE_CODE));
+		ZB_DATE_CODE,
+		ZB_ZCL_STRING_CONST_SIZE(ZB_DATE_CODE));
 	dev_ctx.basic_attr.base.power_source = 
 #if defined(FEATURE_DEEP_SLEEP) || defined(FEATURE_LIGHT_SLEEP)
         ZB_ZCL_BASIC_POWER_SOURCE_BATTERY
@@ -655,13 +656,13 @@ void app_device_ctx_init(void)
 ;
     ZB_ZCL_SET_STRING_VAL(
 		dev_ctx.basic_attr.base.location_id,
-		ESP_LOCATION_ID,
-		ZB_ZCL_STRING_CONST_SIZE(ESP_LOCATION_ID));
+		ZB_LOCATION_ID,
+		ZB_ZCL_STRING_CONST_SIZE(ZB_LOCATION_ID));
     dev_ctx.basic_attr.base.ph_env = ZB_ZCL_BASIC_ENV_UNSPECIFIED;
     ZB_ZCL_SET_STRING_VAL(
 		dev_ctx.basic_attr.base.location_id,
-		ESP_LOCATION_ID,
-		ZB_ZCL_STRING_CONST_SIZE(ESP_LOCATION_ID));
+		ZB_LOCATION_ID,
+		ZB_ZCL_STRING_CONST_SIZE(ZB_LOCATION_ID));
     ZB_ZCL_SET_STRING_VAL(
 		dev_ctx.basic_attr.base.sw_ver,
 		SW_BUILD_ID,
@@ -674,12 +675,12 @@ void app_device_ctx_init(void)
 		ZB_ZCL_STRING_CONST_SIZE(PRODUCT_LABEL));
     ZB_ZCL_SET_STRING_VAL(
 		dev_ctx.basic_attr.product_url,
-		ESP_PRODUCT_URL,
-		ZB_ZCL_STRING_CONST_SIZE(ESP_PRODUCT_URL));
+		ZB_PRODUCT_URL,
+		ZB_ZCL_STRING_CONST_SIZE(ZB_PRODUCT_URL));
     ZB_ZCL_SET_STRING_VAL(
 		dev_ctx.basic_attr.product_code_id,
-		ESP_PRODUCT_CODE,
-		ZB_ZCL_STRING_CONST_SIZE(ESP_PRODUCT_CODE));
+		ZB_PRODUCT_CODE,
+		ZB_ZCL_STRING_CONST_SIZE(ZB_PRODUCT_CODE));
 
 	/* Identify cluster attributes data. */
 	dev_ctx.identify_attr.identify_time =
@@ -1029,10 +1030,11 @@ static void modify_attr_cb(zb_uint8_t endpoint,
 
     if (endpoint == GAS_METER_ENDPOINT &&
         cluster_id == ZB_ZCL_CLUSTER_ID_METERING &&
-        attr_id == ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID) {
+        attr_id == GAS_METER_ATTR_SET_SUMMATION_ID) {
 
-        zb_uint48_t *v = (zb_uint48_t *)new_value;
-        zb_counter_set(*v);
+        zb_uint48_t v;
+        memcpy(&v, new_value, sizeof(v));
+        zb_counter_set(v);
     }
 }
 
@@ -1211,6 +1213,9 @@ void zboss_signal_handler(zb_bufid_t bufid)
             break;
         case ZB_SIGNAL_JOIN_DONE:
             LOG_INF("Zigbee join done");
+#if HAS_XIAO_RGB_LED && IS_ENABLED(CONFIG_DEBUG)
+            xiao_led_blue_set(false);
+#endif
             report_event_post(REPORT_REQUEST_TIMING);
 #ifdef FEATURE_DEEP_SLEEP
             poweroff_mgr_user_window_extend(10000);
@@ -1405,6 +1410,9 @@ static void zb_task(void *p1, void *p2, void *p3)
 	ARG_UNUSED(p3);
 
     LOG_INF("Configuring zigbee device");
+#if HAS_XIAO_RGB_LED && IS_ENABLED(CONFIG_DEBUG)
+    xiao_led_blue_set(true);
+#endif
 
     app_zigbee_fota_init();
 

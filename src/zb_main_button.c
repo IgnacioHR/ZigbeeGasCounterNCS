@@ -28,6 +28,7 @@ LOG_MODULE_REGISTER(btn_main, LOG_LEVEL_INF);
 #include "zb_report_event.h"
 #include "zb_zigbee.h"
 #include "zb_gpio_stable.h"
+#include "zb_led.h"
 
 #ifdef FEATURE_DEEP_SLEEP
 static atomic_t started_from_deep_sleep = ATOMIC_INIT(false);
@@ -507,6 +508,9 @@ static void btn_task(void *p1, void *p2, void *p3)
 #ifdef CONFIG_DEBUG
 			gpio_pin_set_dt(&led_main_button, 1);
 #endif
+#if HAS_XIAO_RGB_LED && IS_ENABLED(CONFIG_DEBUG)
+      xiao_led_red_set(true);
+#endif
 			main_loop_post(SHALL_ENABLE_ZIGBEE);
 #ifdef FEATURE_DEEP_SLEEP
 			poweroff_mgr_user_window_extend(deep_sleep_eval_time_ms(true, false));
@@ -516,6 +520,9 @@ static void btn_task(void *p1, void *p2, void *p3)
 			// LOG_INF("Button release");
 #ifdef CONFIG_DEBUG
 			gpio_pin_set_dt(&led_main_button, 0);
+#endif
+#if HAS_XIAO_RGB_LED && IS_ENABLED(CONFIG_DEBUG)
+      xiao_led_red_set(false);
 #endif
 			break;
 		case SINGLE_CLICK:

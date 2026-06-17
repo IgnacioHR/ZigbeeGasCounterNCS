@@ -34,12 +34,11 @@
 #define GAS_METER_ATTR_SET_SUMMATION_ID       0xF000
 #endif
 
-#define ESP_MANUFACTURER_NAME           "Custom devices (DiY)"
-#define ESP_MODEL_IDENTIFIER            "MiCASAGasCounter" /* Customized model identifier */
-#define ESP_DATE_CODE                   "20250301"
-#define ESP_PRODUCT_URL                 "https://github.com/IgnacioHR/ZigbeeGasCounter"
-#define ESP_PRODUCT_CODE                ""
-#define ESP_LOCATION_ID                 ""
+#define ZB_MANUFACTURER_NAME           "Custom devices (DiY)"
+#define ZB_MODEL_IDENTIFIER            "MiCASAGasCounter" /* Customized model identifier */
+#define ZB_PRODUCT_URL                 "https://github.com/IgnacioHR/ZigbeeGasCounter"
+#define ZB_PRODUCT_CODE                ""
+#define ZB_LOCATION_ID                 ""
 
 // Maximum time to force a device report
 #define MUST_SYNC_MINIMUM_TIME          UINT16_C(15 * 60) // 5 minutes in seconds
