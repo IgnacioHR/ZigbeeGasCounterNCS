@@ -38,6 +38,7 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 #include <zb_nrf_platform.h>
 #include <zephyr/logging/log_ctrl.h>
 #include <zephyr/sys/reboot.h>
+#include <zephyr/dfu/mcuboot.h>
 
 #define ZIGBEE_TASK_STACK_SIZE              10240
 #define ZIGBEE_TASK_PRIORITY                   10
@@ -1220,6 +1221,9 @@ void zboss_signal_handler(zb_bufid_t bufid)
 #ifdef FEATURE_DEEP_SLEEP
             poweroff_mgr_user_window_extend(10000);
 #endif
+            if (!boot_is_img_confirmed()) {
+                main_loop_post(SHALL_CONFIRM_OTA);
+            }
             skip_default = true;
             break;
         case ZB_ZDO_DEVICE_UNAVAILABLE:

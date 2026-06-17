@@ -15,10 +15,13 @@
 
 LOG_MODULE_REGISTER(main_loop, LOG_LEVEL_INF);
 
+#include <zephyr/dfu/mcuboot.h>
+
 #include "zb_features.h"
 #include "zb_main_loop.h"
 #include "zb_zigbee.h"
 #include "zb_adc.h"
+#include "zb_deep_sleep.h"
 
 #define MAIN_LOOP_TASK_STACK_SIZE   2048
 #define MAIN_LOOP_TASK_PRIORITY        5
@@ -39,6 +42,23 @@ static uint32_t main_loop_event_mask(void)
 // 	mask |= SHALL_START_DEEP_SLEEP | SHALL_STOP_DEEP_SLEEP;
 // #endif
 	return mask;
+}
+
+static int confirm_new_ota_image(void)
+{
+	int err = RET_OK;
+
+	if (!boot_is_img_confirmed()) {
+    LOG_WRN("MCUboot image is not confirmed, confirming now");
+
+    err = boot_write_img_confirmed();
+    if (err != 0) {
+      LOG_ERR("Failed to confirm MCUboot image: %d", err);
+    } else {
+    	LOG_INF("MCUboot image confirmed");
+		}
+	}
+	return err;
 }
 
 static void main_loop_task(void *p1, void *p2, void *p3)
@@ -64,6 +84,13 @@ static void main_loop_task(void *p1, void *p2, void *p3)
 			fire_adc();
 		}
 #endif
+		if (events & SHALL_CONFIRM_OTA) {
+			if (confirm_new_ota_image()) {
+#ifdef FEATURE_DEEP_SLEEP
+				poweroff_mgr_block_clear(POF_BLOCK_OTA_CONFIRM);
+#endif				
+			}
+		}
 	}
 }
 static K_THREAD_DEFINE(main_loop_tid, MAIN_LOOP_TASK_STACK_SIZE, main_loop_task, NULL, NULL, NULL, MAIN_LOOP_TASK_PRIORITY, 0, K_TICKS_FOREVER);

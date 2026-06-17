@@ -16,6 +16,8 @@
 #define ZB_DEEP_SLEEP_H
 
 #include "zb_wakeup_cause.h"
+#include "zb_features.h"
+#ifdef FEATURE_DEEP_SLEEP
 
 enum pof_blocker {
 	POF_BLOCK_ZIGBEE_TX     = BIT(0),
@@ -28,6 +30,7 @@ enum pof_blocker {
 	POF_BLOCK_APP_NOT_READY	= BIT(7),
 	POF_BLOCK_OTA						= BIT(8),
 	POF_BLOCK_COUNTER				= BIT(9),
+	POF_BLOCK_OTA_CONFIRM		= BIT(10),
 };
 
 int64_t deep_sleep_eval_time_ms(bool main_button_pressed, bool other_startup);
@@ -47,4 +50,6 @@ void poweroff_mgr_zigbee_rx_begin(void);
 void poweroff_mgr_zigbee_rx_done(void);
 
 bool poweroff_mgr_try_poweroff_now(void);
-#endif
+
+#endif // FEATURE_DEEP_SLEEP
+#endif // ZB_DEEP_SLEEP_H

@@ -23,9 +23,17 @@ LOG_MODULE_REGISTER(adc, LOG_LEVEL_INF);
 #include "zb_main_loop.h"
 #include "zb_zigbee.h"
 
-#define TIME_TO_EXPIRE_ADC_SECONDS			(12 * 60 * 60)
-
 #ifdef FEATURE_MEASURE_BATTERY_LEVEL
+
+/**
+ * @brief The ADC will be measured when the user press main button or when the
+ *        elapsed time since the previous measure is higher than the value in
+ * 				the constant TIME_TO_EXPIRE_ADC_SECONDS (adjusted to 12 hours)
+ *        Note, in order to compute the time this device will use the Time cluster
+ *        to ask for a time server (the coordinador) and will use that date.
+ *        the last time ADC was measured is stored in NVRAM
+ */
+#define TIME_TO_EXPIRE_ADC_SECONDS			(12 * 60 * 60)
 
 #define ADC_TASK_STACK_SIZE   2048
 #define ADC_TASK_PRIORITY        5

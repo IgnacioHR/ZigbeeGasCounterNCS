@@ -169,23 +169,15 @@ static bool is_reed_wakeup_cause(gm_wakeup_cause_t wakeup_cause)
 	return wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE || wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_ACTIVE;
 }
 
-static void app_confirm_mcuboot_image(void)
+static bool check_new_ota_image()
 {
-    int err;
-
-    if (boot_is_img_confirmed()) {
-        return;
-    }
-
-    LOG_WRN("MCUboot image is not confirmed, confirming now");
-
-    err = boot_write_img_confirmed();
-    if (err != 0) {
-        LOG_ERR("Failed to confirm MCUboot image: %d", err);
-        return;
-    }
-
-    LOG_INF("MCUboot image confirmed");
+	if (!boot_is_img_confirmed()) {
+#ifdef FEATURE_DEEP_SLEEP		
+		poweroff_mgr_block_set(POF_BLOCK_OTA_CONFIRM);
+#endif
+		return false;
+	}
+	return true;
 }
 
 int poweroff(void) {
@@ -229,9 +221,10 @@ int main(void)
 		power_down_unused_ram();
 	}
 
-	app_confirm_mcuboot_image();
+	// app_confirm_mcuboot_image();
+	bool new_image_confirmed = check_new_ota_image();
 
-	if (retained_shall_power_off()) {
+	if (new_image_confirmed && retained_shall_power_off()) {
 		LOG_DBG("Requesting WDT reset before system_off path");
 		err = poweroff();
 		if (err != 0) {
@@ -277,10 +270,11 @@ int main(void)
 	if (!is_reed_wakeup_cause(wakeup_cause)) {
  		main_button_start();
 	}
-#ifdef FEATURE_MEASURE_FLOW_RATE
-	// TODO, timer to reset instantaneous demand to 0
-#endif
-	check_shall_enable_radio(wakeup_cause, b_missed_reed);
+	if (new_image_confirmed) {
+		check_shall_enable_radio(wakeup_cause, b_missed_reed);
+	} else {
+		start_radio_and_report(true);
+	}
 	LOG_DBG("Zigbee Gas Counter started");
 
 #ifdef CONFIG_DEBUG
