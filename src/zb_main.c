@@ -34,6 +34,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #include "zb_features.h"
 #include "zb_main_button.h"
 #include "zb_zigbee.h"
+#include "zb_zigbee_ctx.h"
 #include "zb_main_loop.h"
 #include "zb_nvr.h"
 #include "zb_adc.h"
@@ -44,25 +45,6 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #include "zb_deep_sleep.h"
 #include "zb_xiao.h"
 #include "zb_ota.h"
-
-/* Device endpoint, used to receive ZCL commands. */
-#define APP_TEMPLATE_ENDPOINT               10
-
-/* Type of power sources available for the device.
- * For possible values see section 3.2.2.2.8 of ZCL specification.
- */
-#define TEMPLATE_INIT_BASIC_POWER_SOURCE    ZB_ZCL_BASIC_POWER_SOURCE_DC_SOURCE
-
-/* LED indicating that device successfully joined Zigbee network. */
-// #define ZIGBEE_NETWORK_STATE_LED            DK_LED3
-
-/* Button used to enter the Identify mode. */
-// #define IDENTIFY_MODE_BUTTON                DK_BTN4_MSK
-
-/* Button to start Factory Reset */
-// #define FACTORY_RESET_BUTTON                IDENTIFY_MODE_BUTTON
-
-#define SLEEP_TIME_MS (10 * 60 * 1000)
 
 static gm_wakeup_cause_t wakeup_cause;
 

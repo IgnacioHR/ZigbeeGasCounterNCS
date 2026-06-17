@@ -13,6 +13,15 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 
+/**
+ * @brief Helper function to read a pin `stable_samples` times during the indicated `interval`
+ *        and return only when stable_samples are reached
+ * 
+ * @param spec gpio_dt_spec *
+ * @param stable_samples number of stable_samples to reach
+ * @param interval time between samples
+ * @return the last stable value of pin or a negative value in case of errors
+ */
 int gpio_read_stable_level(const struct gpio_dt_spec *spec, int stable_samples, k_timeout_t interval)
 {
 	int last;

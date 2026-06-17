@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(reed, LOG_LEVEL_INF);
 #include "zb_retained.h"
 #include "zb_nvr.h"
 #include "zb_main.h"
-#include "zb_zigbee.h"
+#include "zb_zigbee_ctx.h"
 #include "zb_gpio_stable.h"
 #include "zb_boot_snapshot.h"
 #include "zb_deep_sleep.h"
@@ -46,6 +46,13 @@ static const struct gpio_dt_spec reed_input = GPIO_DT_SPEC_GET(REED_INPUT_NODE, 
 static const struct gpio_dt_spec led_reed_input = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 #endif
 
+/**
+ * @brief Obtains the value of the reed pin
+ * 
+ * @return 0 if DOWN or INACTIVE
+ * @return 1 if UP or ACTIVE
+ * @return negative value if error
+ */
 int reed_read_early_level(void)
 {
 	int err;
@@ -59,6 +66,13 @@ int reed_read_early_level(void)
 	return gpio_pin_get_dt(&reed_input);
 }
 
+/**
+ * @brief Read the pin value until it is stable for 50 msec
+ * 
+ * @return 0 if DOWN or INACTIVE
+ * @return 1 if UP or ACTIVE
+ * @return negative value if error
+ */
 int reed_read_stable_level(void)
 {
 	return gpio_read_stable_level(&reed_input, 5, K_MSEC(10));
@@ -161,6 +175,11 @@ static void reed_thread_check_started(void) {
 	}
 }
 
+/**
+ * @brief Check if the counter shall be incremented and do so in case it shall be
+ *        incremented
+ * 
+ */
 void check_counter_increment(void)
 {
 	reed_thread_check_started();

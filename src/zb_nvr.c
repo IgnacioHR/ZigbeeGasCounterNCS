@@ -21,7 +21,7 @@ LOG_MODULE_REGISTER(nvr, LOG_LEVEL_INF);
 
 #include "zb_features.h"
 #include "zb_nvr.h"
-#include "zb_zigbee.h"
+#include "zb_zigbee_ctx.h"
 #include "zb_reed.h"
 #include "zb_deep_sleep.h"
 
@@ -202,7 +202,6 @@ static int load_current_summ_from_nvr(void)
 	if (!found) {
 		LOG_INF("Counter not found in memory so starting from 0");
 		counter_set_from_u64(0);
-		return 0;
 	}
 
 	return 0;
@@ -242,7 +241,7 @@ static void nvr_init(void)
 	}
 	
 	k_work_init_delayable(&nvr_work, nvr_work_handler);
-#if (IS_ENABLED(CONFIG_LOG))
+#if IS_ENABLED(CONFIG_LOG)
 	log_filter_set(NULL, 0, log_source_id_get("fs_nvs"), LOG_LEVEL_WRN);
 #endif
 	int	err = settings_subsys_init();

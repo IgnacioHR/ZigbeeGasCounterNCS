@@ -23,10 +23,10 @@ LOG_MODULE_REGISTER(deep_sleep, LOG_LEVEL_INF);
 #include "zb_features.h"
 #include "zb_deep_sleep.h"
 #include "zb_retained.h"
-#include "zb_zigbee.h"
 #include "zb_main_button.h"
 #include "zb_reed.h"
 #include "zb_wakeup_cause.h"
+#include "zb_zigbee.h"
 
 #ifdef FEATURE_DEEP_SLEEP
 

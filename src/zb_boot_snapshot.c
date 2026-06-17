@@ -16,7 +16,7 @@
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(gm_boot_snapshot, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(boot_snapshot, LOG_LEVEL_INF);
 
 #include "zb_boot_snapshot.h"
 #include "zb_main_button.h"
@@ -31,6 +31,11 @@ static struct gm_boot_snapshot boot_snapshot = {
 	.reed_latch = -1,
 };
 
+/**
+ * @brief Gives access to the boot_snapshot report collected early during boot
+ * 
+ * @return const struct gm_boot_snapshot* 
+ */
 const struct gm_boot_snapshot *gm_boot_snapshot_get(void)
 {
 	return &boot_snapshot;
@@ -57,11 +62,6 @@ static int gm_boot_snapshot_init(void)
 
 	return 0;
 }
-
-/*
- * APPLICATION porque a este nivel los drivers ya deberían estar listos.
- * Prioridad 0 para ejecutarlo al principio del nivel APPLICATION.
- */
 SYS_INIT(gm_boot_snapshot_init, POST_KERNEL, CONFIG_GAS_DEVICE_INIT_PRIORITY);
 
 bool gm_boot_snapshot_was_system_off_gpio(void)

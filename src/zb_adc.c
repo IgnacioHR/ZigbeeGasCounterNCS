@@ -22,6 +22,7 @@ LOG_MODULE_REGISTER(adc, LOG_LEVEL_INF);
 #include "zb_adc.h"
 #include "zb_main_loop.h"
 #include "zb_zigbee.h"
+#include "zb_zigbee_ctx.h"
 
 #ifdef FEATURE_MEASURE_BATTERY_LEVEL
 
@@ -39,10 +40,9 @@ LOG_MODULE_REGISTER(adc, LOG_LEVEL_INF);
 #define ADC_TASK_PRIORITY        5
 
 static K_SEM_DEFINE(adc_sem, 0, K_SEM_MAX_LIMIT);
-static K_MUTEX_DEFINE(adc_mutex);
 
+static K_MUTEX_DEFINE(adc_mutex);
 static bool adc_started = false;
-static bool adc_fired = false;
 
 #define BATT_DIVIDER_EN_NODE DT_ALIAS(batt_divider_en)
 
@@ -207,16 +207,14 @@ static K_THREAD_DEFINE(adc_tid, ADC_TASK_STACK_SIZE, adc_task, NULL, NULL, NULL,
 
 void fire_adc(void)
 {
-	if (adc_fired)
-		return;
-	k_mutex_lock(&adc_mutex, K_FOREVER);
-	if (adc_fired)
-		return;
-	adc_fired = true;
 	if (!adc_started) {
-		k_thread_start(adc_tid);
+		k_mutex_lock(&adc_mutex, K_FOREVER);
+		if (!adc_started) {
+			k_thread_start(adc_tid);
+			adc_started = true;
+		}
+		k_mutex_unlock(&adc_mutex);
 	}
-	k_mutex_unlock(&adc_mutex);
 	k_sem_give(&adc_sem);
 }
 

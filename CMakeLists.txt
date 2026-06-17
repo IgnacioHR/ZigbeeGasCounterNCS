@@ -54,6 +54,7 @@ target_sources(app PRIVATE
   src/zb_main_button.c
   src/zb_reed.c
   src/zb_zigbee.c
+  src/zb_zigbee_ctx.c
   src/zb_deep_sleep.c
   src/zb_light_sleep.c
   src/zb_main_loop.c

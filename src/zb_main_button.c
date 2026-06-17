@@ -27,6 +27,7 @@ LOG_MODULE_REGISTER(btn_main, LOG_LEVEL_INF);
 #include "zb_deep_sleep.h"
 #include "zb_report_event.h"
 #include "zb_zigbee.h"
+#include "zb_zigbee_ctx.h"
 #include "zb_gpio_stable.h"
 #include "zb_led.h"
 

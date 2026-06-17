@@ -38,9 +38,6 @@ static uint32_t main_loop_event_mask(void)
 #ifdef FEATURE_MEASURE_BATTERY_LEVEL
 	mask |= SHALL_MEASURE_BATTERY;
 #endif
-// #ifdef FEATURE_DEEP_SLEEP
-// 	mask |= SHALL_START_DEEP_SLEEP | SHALL_STOP_DEEP_SLEEP;
-// #endif
 	return mask;
 }
 
@@ -68,6 +65,7 @@ static void main_loop_task(void *p1, void *p2, void *p3)
 		}
 #endif
 		if (events & SHALL_CONFIRM_OTA) {
+			LOG_INF("Start processing: SHALL_CONFIRM_OTA event");
 			confirm_new_ota_image();
 		}
 	}

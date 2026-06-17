@@ -165,6 +165,13 @@ int retained_init(void)
 	return 0;
 }
 
+/**
+ * @brief Stores the next expected value of the reed to NVR so the next time the
+ *        device wakes up it can be compared to this value
+ * 
+ * @param level 
+ * @return int 
+ */
 int retained_set_next_reed_level(uint16_t level)
 {
 	k_spinlock_key_t key;
@@ -266,6 +273,11 @@ bool retained_shall_power_off(void)
 	return value;
 }
 
+/**
+ * @brief obtains the value of the reed level stored in retained ram
+ * 
+ * @return uint16_t 
+ */
 uint16_t retained_get_next_reed_level(void)
 {
 	k_spinlock_key_t key;
@@ -278,11 +290,12 @@ uint16_t retained_get_next_reed_level(void)
 	return value;
 }
 
-// static void retained_schedule_flush(void)
-// {
-// 	k_work_reschedule(&flush_work, K_MSEC(100));
-// }
-
+/**
+ * @brief Stores the value of the last time the summation was sent to 
+ *        coordinator
+ * 
+ * @param value 
+ */
 void retained_set_last_summation_sent(uint64_t value)
 {
 	k_spinlock_key_t key;
@@ -300,6 +313,12 @@ void retained_set_last_summation_sent(uint64_t value)
 	}
 }
 
+/**
+ * @brief Obtains the value the summation was sent to coordinator
+ *        as stored in the the retained memory
+ * 
+ * @return uint64_t 
+ */
 uint64_t retained_get_last_summation_sent(void)
 {
 	k_spinlock_key_t key;

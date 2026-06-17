@@ -22,7 +22,7 @@ LOG_MODULE_REGISTER(instantaneous_demand, LOG_LEVEL_INF);
 #include <zboss_api.h>
 
 #include "zb_instantaneous_demand.h"
-#include "zb_zigbee.h"
+#include "zb_zigbee_ctx.h"
 #include "zb_report_event.h"
 #include "zb_deep_sleep.h"
 

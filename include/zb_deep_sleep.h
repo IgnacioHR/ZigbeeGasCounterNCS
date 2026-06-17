@@ -31,6 +31,7 @@ enum pof_blocker {
 	POF_BLOCK_OTA						= BIT(8),
 	POF_BLOCK_COUNTER				= BIT(9),
 	POF_BLOCK_OTA_CONFIRM		= BIT(10),
+	POF_BLOCK_LEAVE					= BIT(11),
 };
 
 int64_t deep_sleep_eval_time_ms(bool main_button_pressed, bool other_startup);

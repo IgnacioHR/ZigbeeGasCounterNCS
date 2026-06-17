@@ -24,6 +24,7 @@ LOG_MODULE_REGISTER(radio, LOG_LEVEL_INF);
 #include "zb_radio.h"
 #include "zb_report_event.h"
 #include "zb_zigbee.h"
+#include "zb_zigbee_ctx.h"
 #include "zb_retained.h"
 #include "zb_nvr.h"
 #include "zb_deep_sleep.h"
@@ -78,6 +79,12 @@ K_WORK_DEFINE(report_result_work, report_result_work_handler);
 static struct pending_report_ctx pending_reports[MAX_PENDING_REPORTS];
 static struct k_mutex pending_reports_lock;
 
+/**
+ * @brief Transfer values from device context memory to attribute values
+ * 
+ * @param events 
+ * @return zb_zcl_status_t 
+ */
 zb_zcl_status_t radio_report_values(uint32_t events)
 {
 	zb_zcl_status_t status = ZB_ZCL_STATUS_SUCCESS;
@@ -344,6 +351,13 @@ static zb_ret_t radio_write_attr(zb_uint8_t ep, zb_uint16_t cluster_id, zb_uint1
 	return ret;
 }
 
+/**
+ * @brief Inform the coordinator about the attribute values indicated in the `events` parameter
+ *        using low level attribute write commands
+ * 
+ * @param events 
+ * @return zb_zcl_status_t 
+ */
 zb_zcl_status_t radio_send_values(uint32_t events)
 {
 	zb_zcl_status_t status = ZB_ZCL_STATUS_SUCCESS;
@@ -531,6 +545,14 @@ static void time_server_start_search(zb_uint8_t param)
 	}
 }
 
+/**
+ * @brief request the attribute values indicated in `events` from the
+ *        servers. At this time this is used to request current time
+ *        from coordinator endpoint
+ * 
+ * @param events 
+ * @return zb_zcl_status_t 
+ */
 zb_zcl_status_t radio_request_values(uint32_t events)
 {
 	zb_zcl_status_t status = ZB_ZCL_STATUS_SUCCESS;
@@ -546,6 +568,10 @@ zb_zcl_status_t radio_request_values(uint32_t events)
 	return status;
 }
 
+/**
+ * @brief Initializes the internal structures for this module to work
+ * 
+ */
 void radio_report_ctx_init(void)
 {
 	k_mutex_init(&pending_reports_lock);
