@@ -35,6 +35,8 @@ static uint32_t old_zcl_time = 0;
 /* Zigbee device application context storage. */
 static gas_meter_device_ctx_t dev_ctx;
 
+static K_MUTEX_DEFINE(counter_mutex);
+
 /**
  * @brief ZCL_BASIC Cluster
  * 
@@ -696,7 +698,9 @@ void reset_device_status()
  */
 void set_init_current_summ(zb_uint48_t value)
 {
+		k_mutex_lock(&counter_mutex, K_FOREVER);
     dev_ctx.metering_attr.base.curr_summ_delivered = value;
+		k_mutex_unlock(&counter_mutex);
 }
 
 /**
@@ -803,19 +807,24 @@ void set_instantaneous_demand(int32_t value)
  */
 zb_uint64_t get_current_summ(void)
 {
-    uint64_t value = dev_ctx.metering_attr.base.curr_summ_delivered.high;
+		uint64_t value;
+		k_mutex_lock(&counter_mutex, K_FOREVER);
+    value = dev_ctx.metering_attr.base.curr_summ_delivered.high;
     value <<= 32;
     value |= dev_ctx.metering_attr.base.curr_summ_delivered.low;
+		k_mutex_unlock(&counter_mutex);
 
     return value;
 }
 
 void zb_counter_increment(void)
 {
+		k_mutex_lock(&counter_mutex, K_FOREVER);
     dev_ctx.metering_attr.base.curr_summ_delivered.low += 1;
     if (dev_ctx.metering_attr.base.curr_summ_delivered.low == 0) {
         dev_ctx.metering_attr.base.curr_summ_delivered.high += 1;
     }
+		k_mutex_unlock(&counter_mutex);
     report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
     nvr_schedule_save(NVR_ITEM_COUNTER);
 
@@ -826,7 +835,10 @@ void zb_counter_increment(void)
 
 void zb_counter_set(zb_uint48_t value)
 {
+		k_mutex_lock(&counter_mutex, K_FOREVER);
     dev_ctx.metering_attr.base.curr_summ_delivered = value;
+		k_mutex_unlock(&counter_mutex);
+
     report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
     nvr_schedule_save(NVR_ITEM_COUNTER);
 }

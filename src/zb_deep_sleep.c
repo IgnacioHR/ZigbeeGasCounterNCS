@@ -311,9 +311,9 @@ static void poweroff_thread(void *a, void *b, void *c)
 	LOG_INF("Poweroff thread started");
 
 	while (true) {
-		k_event_wait(&pof_events,
+		k_event_wait_safe(&pof_events,
 			     POF_EVT_EVAL,
-			     true,
+			     false,
 			     K_FOREVER);
 
 		LOG_DBG("Event received");
@@ -344,9 +344,9 @@ static void poweroff_thread(void *a, void *b, void *c)
 				continue;
 			}
 
-			uint32_t events = k_event_wait(&pof_events,
+			uint32_t events = k_event_wait_safe(&pof_events,
 						       POF_EVT_EVAL,
-						       true,
+						       false,
 						       K_MSEC(delay_ms));
 
 			if (events & POF_EVT_EVAL) {
