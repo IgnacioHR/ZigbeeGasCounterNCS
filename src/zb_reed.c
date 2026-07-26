@@ -187,7 +187,7 @@ void check_counter_increment(void)
 #ifdef CONFIG_DEBUG
 		reed_led_on();
 #endif		
-		nvr_wait_loaded(GM_NVRAM_WAIT_TIMEOUT);
+		nvr_ensure_loaded();
 		zb_counter_increment();
 	}
 }

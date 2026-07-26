@@ -89,31 +89,10 @@ zb_zcl_status_t radio_report_values(uint32_t events)
 {
 	zb_zcl_status_t status = ZB_ZCL_STATUS_SUCCESS;
 	if (events & REPORT_CURRENT_SUMMATION_DELIVERED) {
-		status = zb_zcl_set_attr_val(
-			GAS_METER_ENDPOINT,
-			ZB_ZCL_CLUSTER_ID_METERING,
-			ZB_ZCL_CLUSTER_SERVER_ROLE,
-			ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID,
-			(zb_uint8_t *)&(get_dev_ctx_ptr()->metering_attr).base.curr_summ_delivered,
-			false);
+		status = set_current_summ_delievered();
 		if (status != ZB_ZCL_STATUS_SUCCESS) {
-			LOG_ERR("Updating value of current summation delivered: 0x%04x", status);
 			return status;
 		}
-#ifdef FEATURE_WRITE_COUNTER_VALUE
-		status = zb_zcl_set_attr_val_manuf(
-			GAS_METER_ENDPOINT,
-			ZB_ZCL_CLUSTER_ID_METERING,
-			ZB_ZCL_CLUSTER_SERVER_ROLE,
-			GAS_METER_ATTR_SET_SUMMATION_ID,
-			ZB_ZCL_MANUFACTURER_SPECIFIC,
-			(zb_uint8_t *)&(get_dev_ctx_ptr()->metering_attr).base.curr_summ_delivered,
-			false);
-		if (status != ZB_ZCL_STATUS_SUCCESS) {
-			LOG_ERR("Updating value of current summation delivered (p): 0x%04x", status);
-			return status;
-		}
-#endif
 	}
 #ifdef FEATURE_MEASURE_FLOW_RATE
 	if (events & REPORT_INSTANTANEOUS_DEMAND) {
@@ -266,7 +245,7 @@ static int pending_report_put(zb_bufid_t bufid, zb_uint8_t ep, zb_uint16_t clust
 	return ret;
 }
 
-static zb_ret_t radio_write_attr(zb_uint8_t ep, zb_uint16_t cluster_id, zb_uint16_t attr_id, zb_uint8_t attr_type, zb_uint8_t *value_ptr)
+zb_ret_t radio_write_attr(zb_uint8_t ep, zb_uint16_t cluster_id, zb_uint16_t attr_id, zb_uint8_t attr_type, zb_uint8_t *value_ptr)
 {
 	zb_bufid_t bufid;
 	zb_uint8_t *ptr;
@@ -364,30 +343,10 @@ zb_zcl_status_t radio_send_values(uint32_t events)
 	zb_ret_t ret;
 
 	if (events & REPORT_CURRENT_SUMMATION_DELIVERED) {
-		ret = radio_write_attr(
-			GAS_METER_ENDPOINT,
-			ZB_ZCL_CLUSTER_ID_METERING,
-			ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID, 
-			ZB_ZCL_ATTR_TYPE_U48, 
-			(zb_uint8_t *)&(get_dev_ctx_ptr()->metering_attr).base.curr_summ_delivered
-		);
+		ret = radio_write_current_summ_delivered();
 		if (ret != RET_OK) {
-			LOG_ERR("Write attribute ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID failed (err: %d)", ret);
 			status = ZB_ZCL_STATUS_FAIL;
 		}
-#ifdef FEATURE_WRITE_COUNTER_VALUE
-		ret = radio_write_attr(
-			GAS_METER_ENDPOINT,
-			ZB_ZCL_CLUSTER_ID_METERING,
-			GAS_METER_ATTR_SET_SUMMATION_ID, 
-			ZB_ZCL_ATTR_TYPE_U48, 
-			(zb_uint8_t *)&(get_dev_ctx_ptr()->metering_attr).base.curr_summ_delivered
-		);
-		if (ret != RET_OK) {
-			LOG_ERR("Write attribute GAS_METER_ATTR_SET_SUMMATION_ID failed (err: %d)", ret);
-			status = ZB_ZCL_STATUS_FAIL;
-		}
-#endif
 	}
 #ifdef FEATURE_MEASURE_FLOW_RATE
 	if (events & REPORT_INSTANTANEOUS_DEMAND) {

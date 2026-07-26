@@ -21,6 +21,6 @@ enum nvr_items {
 };
 
 void nvr_schedule_save(uint32_t nvr_items_mask);
-int nvr_wait_loaded(k_timeout_t timeout);
+int nvr_ensure_loaded();
 
 #endif // ZB_NVR

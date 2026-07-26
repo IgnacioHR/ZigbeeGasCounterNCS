@@ -29,6 +29,7 @@ LOG_MODULE_REGISTER(nvr, LOG_LEVEL_INF);
 #define NVR_TASK_PRIORITY        5
 
 static bool nvr_started = false;
+static int nvr_load_result;
 static K_MUTEX_DEFINE(nvr_mutex);
 static uint32_t nvr_dirty_mask;
 
@@ -36,31 +37,6 @@ static uint32_t nvr_dirty_mask;
 #define GM_SETTINGS_TIME_KEY 				"gm/time"
 
 static struct k_work_delayable nvr_work;
-
-static struct gm_nvram_state {
-	struct k_sem loaded_sem;
-	struct k_mutex lock;
-	bool load_done;
-	int load_result;
-	bool counter_valid;
-} nvram = {
-	.loaded_sem = Z_SEM_INITIALIZER(nvram.loaded_sem, 0, 1),
-	.lock = Z_MUTEX_INITIALIZER(nvram.lock),
-};
-
-static void gm_nvram_mark_loaded(int result)
-{
-	k_mutex_lock(&nvram.lock, K_FOREVER);
-	nvram.load_result = result;
-	nvram.load_done = true;
-	k_mutex_unlock(&nvram.lock);
-	/*
-	 * Semáforo binario: límite 1.
-	 * Si el main todavía no está esperando, queda disponible.
-	 * Si ya estaba esperando, lo despierta.
-	 */
-	k_sem_give(&nvram.loaded_sem);
-}
 
 static void nvr_work_handler(struct k_work *work)
 {
@@ -140,10 +116,6 @@ static int counter_load_cb(const char *name, size_t len, settings_read_cb read_c
 
 	ARG_UNUSED(name);
 
-	if (found != NULL) {
-		*found = true;
-	}
-
 	if (len != sizeof(saved_count)) {
 		LOG_ERR("Invalid stored counter size: %zu", len);
 		return -EINVAL;
@@ -161,9 +133,15 @@ static int counter_load_cb(const char *name, size_t len, settings_read_cb read_c
 	}
 
 	ret = counter_set_from_u64(saved_count);
-	gm_nvram_mark_loaded(ret);
+	if (ret != 0) {
+		return ret;
+	}
 
-	return ret;
+	if (found != NULL) {
+		*found = true;
+	}
+
+	return 0;
 }
 
 static int time_load_cb(const char *name, size_t len, settings_read_cb read_cb, void* cb_arg, void *param)
@@ -172,10 +150,6 @@ static int time_load_cb(const char *name, size_t len, settings_read_cb read_cb, 
 	bool *found = param;
 
 	ARG_UNUSED(name);
-
-	if (found != NULL) {
-		*found = true;
-	}
 
 	if (len != sizeof(saved_time)) {
 		LOG_ERR("Invalid stored time size: %zu", len);
@@ -194,9 +168,15 @@ static int time_load_cb(const char *name, size_t len, settings_read_cb read_cb, 
 	}
 
 	ret = time_set_from_u32(saved_time);
-	gm_nvram_mark_loaded(ret);
+	if (ret != 0) {
+		return ret;
+	}
 
-	return ret;
+	if (found != NULL) {
+		*found = true;
+	}
+
+	return 0;
 }
 
 static int load_current_summ_from_nvr(void)
@@ -244,9 +224,12 @@ static int load_current_time_from_nvr(void)
  */
 static void nvr_init(void)
 {
-	if (nvr_started)
+	if (nvr_started) {
 		return;
+	}
+
 	k_mutex_lock(&nvr_mutex, K_FOREVER);
+	
 	if (nvr_started) {
 		k_mutex_unlock(&nvr_mutex);
 		return;
@@ -256,6 +239,9 @@ static void nvr_init(void)
 #if IS_ENABLED(CONFIG_LOG)
 	log_filter_set(NULL, 0, log_source_id_get("fs_nvs"), LOG_LEVEL_WRN);
 #endif
+
+	int result = 0;
+	
 	int	err = settings_subsys_init();
 	if (err != 0) {
 		LOG_ERR("settings_subsys_init failed: (err: %d)",err);
@@ -266,13 +252,21 @@ static void nvr_init(void)
 		err = load_current_summ_from_nvr();
 		if (err != 0) {
 			LOG_ERR("Error loading current sum from NVR (err: %d)", err);
+			if (result == 0) {
+				result = err;
+			}
 		}
 		err = load_current_time_from_nvr();
 		if (err != 0) {
 			LOG_ERR("Error loading current time from NVR (err: %d)", err);
+			if (result == 0) {
+				result = err;
+			}
 		}
 	}
+	nvr_load_result = result;
 	nvr_started = true;
+
 	k_mutex_unlock(&nvr_mutex);
 }
 
@@ -283,26 +277,10 @@ static void nvr_init(void)
  * @param timeout 
  * @return int 
  */
-int nvr_wait_loaded(k_timeout_t timeout)
+int nvr_ensure_loaded()
 {
-	int err;
-	int result;
 	nvr_init();
-	k_mutex_lock(&nvram.lock, K_FOREVER);
-	if (nvram.load_done) {
-		result = nvram.load_result;
-		k_mutex_unlock(&nvram.lock);
-		return result;
-	}
-	k_mutex_unlock(&nvram.lock);
-	err = k_sem_take(&nvram.loaded_sem, timeout);
-	if (err != 0) {
-		return err; /* -EAGAIN si timeout */
-	}
-	k_mutex_lock(&nvram.lock, K_FOREVER);
-	result = nvram.load_result;
-	k_mutex_unlock(&nvram.lock);
-	return result;
+	return nvr_load_result;
 }
 
 /**

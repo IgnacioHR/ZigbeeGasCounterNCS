@@ -23,5 +23,6 @@ zb_zcl_status_t radio_report_values(uint32_t events);
 zb_zcl_status_t radio_send_values(uint32_t events);
 void radio_report_ctx_init(void);
 zb_zcl_status_t radio_request_values(uint32_t events);
+zb_ret_t radio_write_attr(zb_uint8_t ep, zb_uint16_t cluster_id, zb_uint16_t attr_id, zb_uint8_t attr_type, zb_uint8_t *value_ptr);
 
 #endif

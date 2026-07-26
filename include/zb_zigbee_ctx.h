@@ -84,6 +84,8 @@ zb_uint64_t get_current_summ(void);
 void zb_counter_increment(void);
 uint32_t get_old_time(void);
 void zb_counter_set(zb_uint48_t value);
+zb_zcl_status_t set_current_summ_delievered(void);
+zb_zcl_status_t radio_write_current_summ_delivered(void);
 
 #ifdef FEATURE_MEASURE_BATTERY_LEVEL
 void set_battery_voltage_mv(int32_t voltage_mv);

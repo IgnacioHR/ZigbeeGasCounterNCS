@@ -20,6 +20,7 @@ LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
 #include "zb_features.h"
 #include "zb_zigbee.h"
 #include "zb_zigbee_ctx.h"
+#include "zb_radio.h"
 #include "zb_adc.h"
 #include "zb_report_event.h"
 #include "zb_nvr.h"
@@ -35,7 +36,22 @@ static uint32_t old_zcl_time = 0;
 /* Zigbee device application context storage. */
 static gas_meter_device_ctx_t dev_ctx;
 
+/// START OF LOCAL VARIABLES TO OPERATE WITH
+
+/** 
+ * @brief `current_summ_delivered` is the internal variable to hold the counter and the code shall opetate with.
+ *  
+ *	It is protected via mutex `counter_mutex`
+ */
+static zb_uint48_t current_summ_delivered = {0};
+
+/** 
+ * @brief protects `current_summ_delivered` variable 
+ * 
+ */
 static K_MUTEX_DEFINE(counter_mutex);
+
+// END OF LOCAL VARIABLES TO OPERATE WITH
 
 /**
  * @brief ZCL_BASIC Cluster
@@ -393,82 +409,84 @@ void app_device_ctx_init(void)
 {
 	/* Basic cluster attributes data */
 	dev_ctx.basic_attr.base.zcl_version = ZB_ZCL_VERSION;
-    dev_ctx.basic_attr.base.app_version = APP_VERSION;
-    dev_ctx.basic_attr.base.stack_version = STACK_VERSION;
-    dev_ctx.basic_attr.base.hw_version = HARDWARE_VERSION;
-    ZB_ZCL_SET_STRING_VAL(
-		dev_ctx.basic_attr.base.mf_name,
-		ZB_MANUFACTURER_NAME,
-		ZB_ZCL_STRING_CONST_SIZE(ZB_MANUFACTURER_NAME));
-    ZB_ZCL_SET_STRING_VAL(
-		dev_ctx.basic_attr.base.model_id,
-		ZB_MODEL_IDENTIFIER,
-		ZB_ZCL_STRING_CONST_SIZE(ZB_MODEL_IDENTIFIER));
-    ZB_ZCL_SET_STRING_VAL(
-		dev_ctx.basic_attr.base.date_code,
-		ZB_DATE_CODE,
-		ZB_ZCL_STRING_CONST_SIZE(ZB_DATE_CODE));
+	dev_ctx.basic_attr.base.app_version = APP_VERSION;
+	dev_ctx.basic_attr.base.stack_version = STACK_VERSION;
+	dev_ctx.basic_attr.base.hw_version = HARDWARE_VERSION;
+	ZB_ZCL_SET_STRING_VAL(
+	dev_ctx.basic_attr.base.mf_name,
+	ZB_MANUFACTURER_NAME,
+	ZB_ZCL_STRING_CONST_SIZE(ZB_MANUFACTURER_NAME));
+	ZB_ZCL_SET_STRING_VAL(
+	dev_ctx.basic_attr.base.model_id,
+	ZB_MODEL_IDENTIFIER,
+	ZB_ZCL_STRING_CONST_SIZE(ZB_MODEL_IDENTIFIER));
+	ZB_ZCL_SET_STRING_VAL(
+	dev_ctx.basic_attr.base.date_code,
+	ZB_DATE_CODE,
+	ZB_ZCL_STRING_CONST_SIZE(ZB_DATE_CODE));
 	dev_ctx.basic_attr.base.power_source = 
 #if defined(FEATURE_DEEP_SLEEP) || defined(FEATURE_LIGHT_SLEEP)
-        ZB_ZCL_BASIC_POWER_SOURCE_BATTERY
+    ZB_ZCL_BASIC_POWER_SOURCE_BATTERY
 #else
-        ZB_ZCL_BASIC_POWER_SOURCE_DC_SOURCE
+    ZB_ZCL_BASIC_POWER_SOURCE_DC_SOURCE
 #endif
 ;
-    ZB_ZCL_SET_STRING_VAL(
-		dev_ctx.basic_attr.base.location_id,
-		ZB_LOCATION_ID,
-		ZB_ZCL_STRING_CONST_SIZE(ZB_LOCATION_ID));
-    dev_ctx.basic_attr.base.ph_env = ZB_ZCL_BASIC_ENV_UNSPECIFIED;
-    ZB_ZCL_SET_STRING_VAL(
-		dev_ctx.basic_attr.base.location_id,
-		ZB_LOCATION_ID,
-		ZB_ZCL_STRING_CONST_SIZE(ZB_LOCATION_ID));
-    ZB_ZCL_SET_STRING_VAL(
-		dev_ctx.basic_attr.base.sw_ver,
-		SW_BUILD_ID,
-		ZB_ZCL_STRING_CONST_SIZE(SW_BUILD_ID));
-    dev_ctx.basic_attr.alarm_mask = 0x03;
-    dev_ctx.basic_attr.generic_device_type_id = 0xFF;
-    ZB_ZCL_SET_STRING_VAL(
-		dev_ctx.basic_attr.label_id,
-		PRODUCT_LABEL,
-		ZB_ZCL_STRING_CONST_SIZE(PRODUCT_LABEL));
-    ZB_ZCL_SET_STRING_VAL(
-		dev_ctx.basic_attr.product_url,
-		ZB_PRODUCT_URL,
-		ZB_ZCL_STRING_CONST_SIZE(ZB_PRODUCT_URL));
-    ZB_ZCL_SET_STRING_VAL(
-		dev_ctx.basic_attr.product_code_id,
-		ZB_PRODUCT_CODE,
-		ZB_ZCL_STRING_CONST_SIZE(ZB_PRODUCT_CODE));
+	ZB_ZCL_SET_STRING_VAL(
+	dev_ctx.basic_attr.base.location_id,
+	ZB_LOCATION_ID,
+	ZB_ZCL_STRING_CONST_SIZE(ZB_LOCATION_ID));
+	dev_ctx.basic_attr.base.ph_env = ZB_ZCL_BASIC_ENV_UNSPECIFIED;
+	ZB_ZCL_SET_STRING_VAL(
+	dev_ctx.basic_attr.base.location_id,
+	ZB_LOCATION_ID,
+	ZB_ZCL_STRING_CONST_SIZE(ZB_LOCATION_ID));
+	ZB_ZCL_SET_STRING_VAL(
+	dev_ctx.basic_attr.base.sw_ver,
+	SW_BUILD_ID,
+	ZB_ZCL_STRING_CONST_SIZE(SW_BUILD_ID));
+	dev_ctx.basic_attr.alarm_mask = 0x03;
+	dev_ctx.basic_attr.generic_device_type_id = 0xFF;
+	ZB_ZCL_SET_STRING_VAL(
+	dev_ctx.basic_attr.label_id,
+	PRODUCT_LABEL,
+	ZB_ZCL_STRING_CONST_SIZE(PRODUCT_LABEL));
+	ZB_ZCL_SET_STRING_VAL(
+	dev_ctx.basic_attr.product_url,
+	ZB_PRODUCT_URL,
+	ZB_ZCL_STRING_CONST_SIZE(ZB_PRODUCT_URL));
+	ZB_ZCL_SET_STRING_VAL(
+	dev_ctx.basic_attr.product_code_id,
+	ZB_PRODUCT_CODE,
+	ZB_ZCL_STRING_CONST_SIZE(ZB_PRODUCT_CODE));
 
 	/* Identify cluster attributes data. */
 	dev_ctx.identify_attr.identify_time =
 		ZB_ZCL_IDENTIFY_IDENTIFY_TIME_DEFAULT_VALUE;
 
 #ifdef FEATURE_MEASURE_BATTERY_LEVEL
-    dev_ctx.power_config_attr.battery_voltage = 0;
-    dev_ctx.power_config_attr.battery_percentage = 0;
-    dev_ctx.power_config_attr.battery_alarm_state = 0;
-    dev_ctx.power_config_attr.battery_alarm_mask = 
-        ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_LOW | ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_HIGH | ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_UNAVAIL;
-    dev_ctx.power_config_attr.battery_voltage_min = UINT8_C(MIN_BATTERY_VOLTAGE/100);
-    dev_ctx.power_config_attr.battery_voltage_th1 = UINT8_C(WARN_BATTERY_VOLTAGE/100);
-    dev_ctx.power_config_attr.battery_voltage_rated = RATED_BATTERY_VOLTAGE / 100;
-    dev_ctx.power_config_attr.battery_quantity = BATTERY_UNITS;
+	dev_ctx.power_config_attr.battery_voltage = 0;
+	dev_ctx.power_config_attr.battery_percentage = 0;
+	dev_ctx.power_config_attr.battery_alarm_state = 0;
+	dev_ctx.power_config_attr.battery_alarm_mask = 
+			ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_LOW | ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_HIGH | ZB_ZCL_POWER_CONFIG_MAINS_ALARM_MASK_VOLTAGE_UNAVAIL;
+	dev_ctx.power_config_attr.battery_voltage_min = UINT8_C(MIN_BATTERY_VOLTAGE/100);
+	dev_ctx.power_config_attr.battery_voltage_th1 = UINT8_C(WARN_BATTERY_VOLTAGE/100);
+	dev_ctx.power_config_attr.battery_voltage_rated = RATED_BATTERY_VOLTAGE / 100;
+	dev_ctx.power_config_attr.battery_quantity = BATTERY_UNITS;
 #endif
-    dev_ctx.metering_attr.base.curr_summ_delivered = (zb_uint48_t){.low=0, .high = 0};
-    dev_ctx.metering_attr.base.status = 0x0;
-    dev_ctx.metering_attr.base.unit_of_measure = ZB_ZCL_METERING_UNIT_M3_M3H_BINARY;
-    dev_ctx.metering_attr.base.summation_formatting = ZB_ZCL_METERING_FORMATTING_SET(true, 7, 2);
-    dev_ctx.metering_attr.base.device_type = ZB_ZCL_METERING_GAS_METERING;
-    dev_ctx.metering_attr.device_extended_status = 0x0;
-    dev_ctx.metering_attr.divisor = (zb_uint24_t){.high=0,.low=100};
-    dev_ctx.metering_attr.multiplier = (zb_uint24_t){.high=0,.low=1};
+	k_mutex_lock(&counter_mutex, K_FOREVER);
+	dev_ctx.metering_attr.base.curr_summ_delivered = current_summ_delivered;
+	k_mutex_unlock(&counter_mutex);
+	dev_ctx.metering_attr.base.status = 0x0;
+	dev_ctx.metering_attr.base.unit_of_measure = ZB_ZCL_METERING_UNIT_M3_M3H_BINARY;
+	dev_ctx.metering_attr.base.summation_formatting = ZB_ZCL_METERING_FORMATTING_SET(true, 7, 2);
+	dev_ctx.metering_attr.base.device_type = ZB_ZCL_METERING_GAS_METERING;
+	dev_ctx.metering_attr.device_extended_status = 0x0;
+	dev_ctx.metering_attr.divisor = (zb_uint24_t){.high=0,.low=100};
+	dev_ctx.metering_attr.multiplier = (zb_uint24_t){.high=0,.low=1};
 #ifdef FEATURE_MEASURE_FLOW_RATE
-    dev_ctx.metering_attr.instantaneous_demand = (zb_int24_t){.high=0,.low=0};
-    dev_ctx.metering_attr.demand_formatting = ZB_ZCL_METERING_FORMATTING_SET(true, 2, 3);
+	dev_ctx.metering_attr.instantaneous_demand = (zb_int24_t){.high=0,.low=0};
+	dev_ctx.metering_attr.demand_formatting = ZB_ZCL_METERING_FORMATTING_SET(true, 2, 3);
 #endif
 }
 
@@ -541,13 +559,14 @@ void app_clusters_attr_set(void)
 		ZB_FALSE);
 #endif
 
-    nvr_wait_loaded(K_SECONDS(2));
+  nvr_ensure_loaded();
+	k_mutex_lock(&counter_mutex, K_FOREVER);
 	ZB_ZCL_SET_ATTRIBUTE(
 		GAS_METER_ENDPOINT,
 		ZB_ZCL_CLUSTER_ID_METERING,
 		ZB_ZCL_CLUSTER_SERVER_ROLE,
 		ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID,
-		(zb_uint8_t *)&dev_ctx.metering_attr.base.curr_summ_delivered,
+		(zb_uint8_t *)&current_summ_delivered,
 		ZB_FALSE);
 #ifdef FEATURE_WRITE_COUNTER_VALUE
     ret = zb_zcl_set_attr_val_manuf(
@@ -556,12 +575,13 @@ void app_clusters_attr_set(void)
 		ZB_ZCL_CLUSTER_SERVER_ROLE,
 		GAS_METER_ATTR_SET_SUMMATION_ID,
         ZB_ZCL_MANUFACTURER_SPECIFIC,
-		(zb_uint8_t *)&dev_ctx.metering_attr.base.curr_summ_delivered,
+		(zb_uint8_t *)&current_summ_delivered,
 		ZB_FALSE);
     if (ret != ZB_ZCL_STATUS_SUCCESS) {
         LOG_ERR("Can't set GAS_METER_ATTR_SET_SUMMATION_ID attribute value");
     }
 #endif
+	k_mutex_unlock(&counter_mutex);
 	ZB_ZCL_SET_ATTRIBUTE(
 		GAS_METER_ENDPOINT,
 		ZB_ZCL_CLUSTER_ID_METERING,
@@ -699,6 +719,7 @@ void reset_device_status()
 void set_init_current_summ(zb_uint48_t value)
 {
 		k_mutex_lock(&counter_mutex, K_FOREVER);
+		current_summ_delivered = value;
     dev_ctx.metering_attr.base.curr_summ_delivered = value;
 		k_mutex_unlock(&counter_mutex);
 }
@@ -809,9 +830,9 @@ zb_uint64_t get_current_summ(void)
 {
 		uint64_t value;
 		k_mutex_lock(&counter_mutex, K_FOREVER);
-    value = dev_ctx.metering_attr.base.curr_summ_delivered.high;
+    value = current_summ_delivered.high;
     value <<= 32;
-    value |= dev_ctx.metering_attr.base.curr_summ_delivered.low;
+    value |= current_summ_delivered.low;
 		k_mutex_unlock(&counter_mutex);
 
     return value;
@@ -820,9 +841,9 @@ zb_uint64_t get_current_summ(void)
 void zb_counter_increment(void)
 {
 		k_mutex_lock(&counter_mutex, K_FOREVER);
-    dev_ctx.metering_attr.base.curr_summ_delivered.low += 1;
-    if (dev_ctx.metering_attr.base.curr_summ_delivered.low == 0) {
-        dev_ctx.metering_attr.base.curr_summ_delivered.high += 1;
+    current_summ_delivered.low += 1;
+    if (current_summ_delivered.low == 0) {
+        current_summ_delivered.high += 1;
     }
 		k_mutex_unlock(&counter_mutex);
     report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
@@ -833,10 +854,16 @@ void zb_counter_increment(void)
 #endif
 }
 
+/**
+ * @brief Sets the value of the `current_summ_delivered` internal counter and starts the process to report
+ * it up to the coordinator and save it to the nvr
+ * 
+ * @param value the new counter absolute value
+ */
 void zb_counter_set(zb_uint48_t value)
 {
 		k_mutex_lock(&counter_mutex, K_FOREVER);
-    dev_ctx.metering_attr.base.curr_summ_delivered = value;
+    current_summ_delivered = value;
 		k_mutex_unlock(&counter_mutex);
 
     report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
@@ -915,4 +942,70 @@ void app_configure_reporting(void)
         ZB_ZCL_ATTR_POWER_CONFIG_BATTERY_VOLTAGE_ID,
         (zb_uint32_t)0
     );
+}
+
+zb_zcl_status_t set_current_summ_delievered(void)
+{
+		k_mutex_lock(&counter_mutex, K_FOREVER);
+		zb_zcl_status_t status = zb_zcl_set_attr_val(
+			GAS_METER_ENDPOINT,
+			ZB_ZCL_CLUSTER_ID_METERING,
+			ZB_ZCL_CLUSTER_SERVER_ROLE,
+			ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID,
+			(zb_uint8_t *)&current_summ_delivered,
+			false);
+		if (status != ZB_ZCL_STATUS_SUCCESS) {
+			LOG_ERR("Updating value of current summation delivered: 0x%04x", status);
+			return status;
+		}
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+		status = zb_zcl_set_attr_val_manuf(
+			GAS_METER_ENDPOINT,
+			ZB_ZCL_CLUSTER_ID_METERING,
+			ZB_ZCL_CLUSTER_SERVER_ROLE,
+			GAS_METER_ATTR_SET_SUMMATION_ID,
+			ZB_ZCL_MANUFACTURER_SPECIFIC,
+			(zb_uint8_t *)&current_summ_delivered,
+			false);
+		if (status != ZB_ZCL_STATUS_SUCCESS) {
+			LOG_ERR("Updating value of current summation delivered (p): 0x%04x", status);
+			return status;
+		}
+#endif
+		k_mutex_unlock(&counter_mutex);
+		return status;
+}
+
+zb_zcl_status_t radio_write_current_summ_delivered(void)
+{
+		zb_zcl_status_t status = ZB_ZCL_STATUS_SUCCESS;
+		zb_ret_t ret;
+
+		k_mutex_lock(&counter_mutex, K_FOREVER);
+		ret = radio_write_attr(
+			GAS_METER_ENDPOINT,
+			ZB_ZCL_CLUSTER_ID_METERING,
+			ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID, 
+			ZB_ZCL_ATTR_TYPE_U48, 
+			(zb_uint8_t *)&current_summ_delivered
+		);
+		if (ret != RET_OK) {
+			LOG_ERR("Write attribute ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID failed (err: %d)", ret);
+			status = ZB_ZCL_STATUS_FAIL;
+		}
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+		ret = radio_write_attr(
+			GAS_METER_ENDPOINT,
+			ZB_ZCL_CLUSTER_ID_METERING,
+			GAS_METER_ATTR_SET_SUMMATION_ID, 
+			ZB_ZCL_ATTR_TYPE_U48, 
+			(zb_uint8_t *)&current_summ_delivered
+		);
+		if (ret != RET_OK) {
+			LOG_ERR("Write attribute GAS_METER_ATTR_SET_SUMMATION_ID failed (err: %d)", ret);
+			status = ZB_ZCL_STATUS_FAIL;
+		}
+#endif
+		k_mutex_unlock(&counter_mutex);
+		return status;
 }

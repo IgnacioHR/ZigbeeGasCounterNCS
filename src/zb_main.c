@@ -91,7 +91,7 @@ static bool reed_inactive_requires_radio(uint64_t *not_reported)
 	uint64_t current;
 	uint64_t last;
 
-	nvr_wait_loaded(K_SECONDS(2));
+	nvr_ensure_loaded();
 
 	current = get_current_summ();
 	last = retained_get_last_summation_sent();
