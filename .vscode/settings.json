@@ -1,5 +1,6 @@
 {
 	"nrf-connect.debugging.bindings": {
-		"${workspaceFolder}/build/ZigbeeGasCounterNCS": "Launch ZigbeeGasCounterNCS/build/ZigbeeGasCounterNCS"
+		"${workspaceFolder}/build/ZigbeeGasCounterNCS": "Launch ZigbeeGasCounterNCS/build/ZigbeeGasCounterNCS",
+		"${workspaceFolder}/build/mcuboot": "Launch ZigbeeGasCounterNCS/build/mcuboot"
 	}
 }

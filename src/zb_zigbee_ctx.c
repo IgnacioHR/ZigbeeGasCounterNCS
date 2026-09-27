@@ -15,7 +15,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(zigbee, LOG_LEVEL_INF);
+LOG_MODULE_DECLARE(zigbee, LOG_LEVEL_INF);
 
 #include "zb_features.h"
 #include "zb_zigbee.h"
@@ -38,12 +38,7 @@ static gas_meter_device_ctx_t dev_ctx;
 
 /// START OF LOCAL VARIABLES TO OPERATE WITH
 
-/** 
- * @brief `current_summ_delivered` is the internal variable to hold the counter and the code shall opetate with.
- *  
- *	It is protected via mutex `counter_mutex`
- */
-static zb_uint48_t current_summ_delivered = {0};
+static zb_uint48_t counter_raw = {0};
 
 /** 
  * @brief protects `current_summ_delivered` variable 
@@ -191,7 +186,7 @@ static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(metering_attr_list, ZB_
 		ZB_ZCL_ATTR_TYPE_U48, \
 		ZB_ZCL_ATTR_ACCESS_READ_WRITE, \
 		ZB_ZCL_MANUFACTURER_SPECIFIC, \
-		(void*)(&dev_ctx.metering_attr.base.curr_summ_delivered) \
+		(void*)(&dev_ctx.metering_attr.curr_summ_delivered_offset) \
 	}, \
 	ZB_ZCL_FINISH_DECLARE_ATTRIB_LIST;
 #endif
@@ -232,7 +227,7 @@ static ZB_ZCL_START_DECLARE_ATTRIB_LIST_CLUSTER_REVISION(metering_attr_list, ZB_
 		ZB_ZCL_ATTR_TYPE_U48, \
 		ZB_ZCL_ATTR_ACCESS_READ_WRITE | ZB_ZCL_ATTR_MANUF_SPEC, \
 		HW_MANUFACTURER_CODE, \
-		(void*)(&dev_ctx.metering_attr.base.curr_summ_delivered) \
+		(void*)(&dev_ctx.metering_attr.curr_summ_delivered_offset) \
 	}, \
 	ZB_ZCL_FINISH_DECLARE_ATTRIB_LIST;
 #endif
@@ -475,7 +470,10 @@ void app_device_ctx_init(void)
 	dev_ctx.power_config_attr.battery_quantity = BATTERY_UNITS;
 #endif
 	k_mutex_lock(&counter_mutex, K_FOREVER);
-	dev_ctx.metering_attr.base.curr_summ_delivered = current_summ_delivered;
+	dev_ctx.metering_attr.base.curr_summ_delivered = counter_raw;
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+	dev_ctx.metering_attr.curr_summ_delivered_offset = (zb_uint48_t){.high=0,.low=0};
+#endif
 	k_mutex_unlock(&counter_mutex);
 	dev_ctx.metering_attr.base.status = 0x0;
 	dev_ctx.metering_attr.base.unit_of_measure = ZB_ZCL_METERING_UNIT_M3_M3H_BINARY;
@@ -492,7 +490,6 @@ void app_device_ctx_init(void)
 
 void app_clusters_attr_set(void)
 {
-    zb_zcl_status_t ret = ZB_ZCL_STATUS_FAIL;
 #ifdef FEATURE_MEASURE_BATTERY_LEVEL
     ZB_ZCL_SET_ATTRIBUTE(
 		GAS_METER_ENDPOINT,
@@ -566,19 +563,20 @@ void app_clusters_attr_set(void)
 		ZB_ZCL_CLUSTER_ID_METERING,
 		ZB_ZCL_CLUSTER_SERVER_ROLE,
 		ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID,
-		(zb_uint8_t *)&current_summ_delivered,
+		(zb_uint8_t *)&dev_ctx.metering_attr.base.curr_summ_delivered,
 		ZB_FALSE);
 #ifdef FEATURE_WRITE_COUNTER_VALUE
+		zb_zcl_status_t ret = ZB_ZCL_STATUS_FAIL;
     ret = zb_zcl_set_attr_val_manuf(
-		GAS_METER_ENDPOINT,
-		ZB_ZCL_CLUSTER_ID_METERING,
-		ZB_ZCL_CLUSTER_SERVER_ROLE,
-		GAS_METER_ATTR_SET_SUMMATION_ID,
-        ZB_ZCL_MANUFACTURER_SPECIFIC,
-		(zb_uint8_t *)&current_summ_delivered,
-		ZB_FALSE);
+			GAS_METER_ENDPOINT,
+			ZB_ZCL_CLUSTER_ID_METERING,
+			ZB_ZCL_CLUSTER_SERVER_ROLE,
+			GAS_METER_ATTR_SET_SUMMATION_ID,
+			HW_MANUFACTURER_CODE,
+			(zb_uint8_t *)&dev_ctx.metering_attr.curr_summ_delivered_offset,
+			ZB_FALSE);
     if (ret != ZB_ZCL_STATUS_SUCCESS) {
-        LOG_ERR("Can't set GAS_METER_ATTR_SET_SUMMATION_ID attribute value");
+        LOG_ERR("Can't set GAS_METER_ATTR_SET_SUMMATION_ID attribute value, status=%u", ret);
     }
 #endif
 	k_mutex_unlock(&counter_mutex);
@@ -711,6 +709,20 @@ void reset_device_status()
     dev_ctx.metering_attr.base.status = 0;
 }
 
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+/**
+ * @brief Set the initial value of the counter offset. Used from NVS
+ * 
+ * @param value 
+ */
+void set_init_offset_summ(zb_uint48_t value)
+{
+		k_mutex_lock(&counter_mutex, K_FOREVER);
+    dev_ctx.metering_attr.curr_summ_delivered_offset = value;
+		k_mutex_unlock(&counter_mutex);
+}
+#endif
+
 /**
  * @brief Set the initial value of the current sum delivered. Used from NVS
  * 
@@ -719,8 +731,7 @@ void reset_device_status()
 void set_init_current_summ(zb_uint48_t value)
 {
 		k_mutex_lock(&counter_mutex, K_FOREVER);
-		current_summ_delivered = value;
-    dev_ctx.metering_attr.base.curr_summ_delivered = value;
+    counter_raw = value;
 		k_mutex_unlock(&counter_mutex);
 }
 
@@ -821,6 +832,22 @@ void set_instantaneous_demand(int32_t value)
 }
 #endif
 
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+/**
+ * @brief Get the current summ value as an uint64 to be saved to NVRAM
+ * 
+ * @return zb_uint64_t 
+ */
+zb_uint64_t get_current_summ_offset(void)
+{
+		zb_uint48_t effective_value = {0};
+		k_mutex_lock(&counter_mutex, K_FOREVER);
+		effective_value = dev_ctx.metering_attr.curr_summ_delivered_offset;
+		k_mutex_unlock(&counter_mutex);
+		return zb_uint48_to_int64(&effective_value);
+}
+#endif
+
 /**
  * @brief Get the current summ value as an uint64 to be saved to NVRAM
  * 
@@ -828,23 +855,28 @@ void set_instantaneous_demand(int32_t value)
  */
 zb_uint64_t get_current_summ(void)
 {
-		uint64_t value;
+		zb_uint48_t effective_value = {0};
 		k_mutex_lock(&counter_mutex, K_FOREVER);
-    value = current_summ_delivered.high;
-    value <<= 32;
-    value |= current_summ_delivered.low;
+		effective_value = counter_raw;
 		k_mutex_unlock(&counter_mutex);
-
-    return value;
+		return zb_uint48_to_int64(&effective_value);
 }
 
 void zb_counter_increment(void)
 {
 		k_mutex_lock(&counter_mutex, K_FOREVER);
-    current_summ_delivered.low += 1;
-    if (current_summ_delivered.low == 0) {
-        current_summ_delivered.high += 1;
+    counter_raw.low += 1;
+    if (counter_raw.low == 0) {
+        counter_raw.high += 1;
     }
+		// check if value plus offset overflows and reset
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+		zb_uint48_t total = {0};
+		zb_uint8_t ret = zb_uint48_add(&counter_raw, &dev_ctx.metering_attr.curr_summ_delivered_offset, &total);
+		if (ret == ZB_MATH_OVERFLOW) {
+			counter_raw = (zb_uint48_t){.low = 0, .high = 0};
+		}
+#endif
 		k_mutex_unlock(&counter_mutex);
     report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
     nvr_schedule_save(NVR_ITEM_COUNTER);
@@ -854,21 +886,27 @@ void zb_counter_increment(void)
 #endif
 }
 
+#ifdef FEATURE_WRITE_COUNTER_VALUE
 /**
- * @brief Sets the value of the `current_summ_delivered` internal counter and starts the process to report
- * it up to the coordinator and save it to the nvr
+ * @brief Receives the value the user wants to see in the counter. So
+ *        this function computes the new offset value based on existing
+ * 				counter value and stores it to nvr.
+ * 
+ * Note: this method is called only when FEATURE_WRITE_COUNTER_VALUE is defined
  * 
  * @param value the new counter absolute value
  */
 void zb_counter_set(zb_uint48_t value)
 {
+		LOG_INF("zb_counter_set called");
 		k_mutex_lock(&counter_mutex, K_FOREVER);
-    current_summ_delivered = value;
+		dev_ctx.metering_attr.curr_summ_delivered_offset = value;
+		counter_raw = (zb_uint48_t){0};
 		k_mutex_unlock(&counter_mutex);
-
     report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
-    nvr_schedule_save(NVR_ITEM_COUNTER);
+		nvr_schedule_save(NVR_ITEM_COUNTER_OFFSET | NVR_ITEM_COUNTER);
 }
+#endif
 
 static void update_reporting_info(zb_uint8_t ep, zb_uint16_t cluster_id, zb_uint8_t cluster_role, zb_uint16_t attr_id, uint32_t min_change)
 {
@@ -947,14 +985,21 @@ void app_configure_reporting(void)
 zb_zcl_status_t set_current_summ_delievered(void)
 {
 		k_mutex_lock(&counter_mutex, K_FOREVER);
+		zb_uint48_t total = {0};
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+		zb_uint48_add(&counter_raw, &dev_ctx.metering_attr.curr_summ_delivered_offset, &total);
+#else
+		total = counter_raw;
+#endif
 		zb_zcl_status_t status = zb_zcl_set_attr_val(
 			GAS_METER_ENDPOINT,
 			ZB_ZCL_CLUSTER_ID_METERING,
 			ZB_ZCL_CLUSTER_SERVER_ROLE,
 			ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID,
-			(zb_uint8_t *)&current_summ_delivered,
+			(zb_uint8_t *)&total,
 			false);
 		if (status != ZB_ZCL_STATUS_SUCCESS) {
+			k_mutex_unlock(&counter_mutex);
 			LOG_ERR("Updating value of current summation delivered: 0x%04x", status);
 			return status;
 		}
@@ -964,11 +1009,12 @@ zb_zcl_status_t set_current_summ_delievered(void)
 			ZB_ZCL_CLUSTER_ID_METERING,
 			ZB_ZCL_CLUSTER_SERVER_ROLE,
 			GAS_METER_ATTR_SET_SUMMATION_ID,
-			ZB_ZCL_MANUFACTURER_SPECIFIC,
-			(zb_uint8_t *)&current_summ_delivered,
+			HW_MANUFACTURER_CODE,
+			(zb_uint8_t *)&dev_ctx.metering_attr.curr_summ_delivered_offset,
 			false);
 		if (status != ZB_ZCL_STATUS_SUCCESS) {
-			LOG_ERR("Updating value of current summation delivered (p): 0x%04x", status);
+			k_mutex_unlock(&counter_mutex);
+			LOG_ERR("Updating value of current summation offset (p): 0x%04x", status);
 			return status;
 		}
 #endif
@@ -982,14 +1028,21 @@ zb_zcl_status_t radio_write_current_summ_delivered(void)
 		zb_ret_t ret;
 
 		k_mutex_lock(&counter_mutex, K_FOREVER);
+		zb_uint48_t total = {0};
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+		zb_uint48_add(&counter_raw, &dev_ctx.metering_attr.curr_summ_delivered_offset, &total);
+#else
+		total = counter_raw;
+#endif
 		ret = radio_write_attr(
 			GAS_METER_ENDPOINT,
 			ZB_ZCL_CLUSTER_ID_METERING,
 			ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID, 
 			ZB_ZCL_ATTR_TYPE_U48, 
-			(zb_uint8_t *)&current_summ_delivered
+			(zb_uint8_t *)&total
 		);
 		if (ret != RET_OK) {
+			k_mutex_unlock(&counter_mutex);
 			LOG_ERR("Write attribute ZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID failed (err: %d)", ret);
 			status = ZB_ZCL_STATUS_FAIL;
 		}
@@ -999,9 +1052,10 @@ zb_zcl_status_t radio_write_current_summ_delivered(void)
 			ZB_ZCL_CLUSTER_ID_METERING,
 			GAS_METER_ATTR_SET_SUMMATION_ID, 
 			ZB_ZCL_ATTR_TYPE_U48, 
-			(zb_uint8_t *)&current_summ_delivered
+			(zb_uint8_t *)&dev_ctx.metering_attr.curr_summ_delivered_offset
 		);
 		if (ret != RET_OK) {
+			k_mutex_unlock(&counter_mutex);
 			LOG_ERR("Write attribute GAS_METER_ATTR_SET_SUMMATION_ID failed (err: %d)", ret);
 			status = ZB_ZCL_STATUS_FAIL;
 		}

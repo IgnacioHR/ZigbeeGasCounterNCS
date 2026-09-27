@@ -20,6 +20,8 @@
 #include <zb_zcl_metering.h>
 #include <zb_zcl_power_config.h>
 
+#include "zb_features.h"
+
 typedef struct {
     zb_zcl_basic_attrs_ext_t base;
 
@@ -52,6 +54,9 @@ typedef struct zb_zcl_my_metering_attrs_s
 #ifdef FEATURE_MEASURE_FLOW_RATE
     zb_int24_t instantaneous_demand;
     zb_uint8_t demand_formatting;
+#endif
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+    zb_uint48_t curr_summ_delivered_offset;
 #endif
 } zb_zcl_my_metering_attrs_t;
 
@@ -86,6 +91,11 @@ uint32_t get_old_time(void);
 void zb_counter_set(zb_uint48_t value);
 zb_zcl_status_t set_current_summ_delievered(void);
 zb_zcl_status_t radio_write_current_summ_delivered(void);
+
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+void set_init_offset_summ(zb_uint48_t value);
+zb_uint64_t get_current_summ_offset(void);
+#endif
 
 #ifdef FEATURE_MEASURE_BATTERY_LEVEL
 void set_battery_voltage_mv(int32_t voltage_mv);

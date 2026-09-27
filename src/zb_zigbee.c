@@ -113,6 +113,7 @@ static void zcl_device_cb(zb_bufid_t bufid)
 {
 	zb_uint16_t cluster_id;
 	zb_uint16_t attr_id;
+    zb_uint8_t endpoint;
 	zb_zcl_device_callback_param_t  *device_cb_param = ZB_BUF_GET_PARAM(bufid, zb_zcl_device_callback_param_t);
 
     zigbee_fota_zcl_cb(bufid);
@@ -131,9 +132,16 @@ static void zcl_device_cb(zb_bufid_t bufid)
 			     set_attr_value_param.cluster_id;
 		attr_id = device_cb_param->cb_param.
 			  set_attr_value_param.attr_id;
-
-        LOG_INF("Unhandled cluster attribute id: %d", cluster_id);
-        device_cb_param->status = RET_NOT_IMPLEMENTED;
+        endpoint = device_cb_param->endpoint;
+        LOG_INF("SET_ATTR endpoint=0x%02x cluster=0x%04x attr=0x%04x",
+                endpoint, cluster_id, attr_id);
+        if (endpoint == GAS_METER_ENDPOINT && cluster_id == ZB_ZCL_CLUSTER_ID_METERING && attr_id == GAS_METER_ATTR_SET_SUMMATION_ID) {
+            zb_uint48_t v = device_cb_param->cb_param.set_attr_value_param.values.data48;
+            zb_counter_set(v);
+            device_cb_param->status = RET_OK;
+        } else {
+            device_cb_param->status = RET_NOT_IMPLEMENTED;
+        }
 		break;
 	default:
         LOG_INF("zcl_device_cb unhandled");
@@ -143,23 +151,24 @@ static void zcl_device_cb(zb_bufid_t bufid)
 	LOG_INF("%s status: %hd", __func__, device_cb_param->status);
 }
 
-static void modify_attr_cb(zb_uint8_t endpoint,
-                               zb_uint16_t cluster_id,
-                               zb_uint16_t attr_id,
-                               zb_uint8_t *new_value)
-{
-    LOG_INF("Modify attr ep=%d cluster=0x%04x attr=0x%04x",
-            endpoint, cluster_id, attr_id);
+// static void modify_attr_cb(zb_uint8_t endpoint,
+//                                zb_uint16_t cluster_id,
+//                                zb_uint16_t attr_id,
+//                                zb_uint8_t *new_value)
+// {
+//     LOG_INF("Modify attr ep=%d cluster=0x%04x attr=0x%04x",
+//             endpoint, cluster_id, attr_id);
+// #ifdef FEATURE_WRITE_COUNTER_VALUE
+//     if (endpoint == GAS_METER_ENDPOINT &&
+//         cluster_id == ZB_ZCL_CLUSTER_ID_METERING &&
+//         attr_id == GAS_METER_ATTR_SET_SUMMATION_ID) {
 
-    if (endpoint == GAS_METER_ENDPOINT &&
-        cluster_id == ZB_ZCL_CLUSTER_ID_METERING &&
-        attr_id == GAS_METER_ATTR_SET_SUMMATION_ID) {
-
-        zb_uint48_t v;
-        memcpy(&v, new_value, sizeof(v));
-        zb_counter_set(v);
-    }
-}
+//         zb_uint48_t v;
+//         memcpy(&v, new_value, sizeof(v));
+//         zb_counter_set(v);
+//     }
+// #endif
+// }
 
 static void report_attr_cb(zb_zcl_addr_t *addr,
                            zb_uint8_t endpoint,
@@ -589,7 +598,7 @@ static void zb_task(void *p1, void *p2, void *p3)
 	ZB_AF_SET_IDENTIFY_NOTIFICATION_HANDLER(GAS_METER_ENDPOINT, identify_cb);
 
     ZB_ZCL_REGISTER_DEVICE_CB(zcl_device_cb);
-    ZB_ZCL_SET_MODIFY_ATTR_VALUE_CB(modify_attr_cb);
+    // ZB_ZCL_SET_MODIFY_ATTR_VALUE_CB(modify_attr_cb);
     ZB_ZCL_SET_REPORT_ATTR_CB(report_attr_cb);
     ZB_AF_SET_ENDPOINT_HANDLER(GAS_METER_ENDPOINT, zcl_endpoint_cb);
 

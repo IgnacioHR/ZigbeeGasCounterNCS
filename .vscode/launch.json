@@ -7,6 +7,13 @@
 			"name": "Launch ZigbeeGasCounterNCS/build/ZigbeeGasCounterNCS",
 			"config": "${workspaceFolder}/build/ZigbeeGasCounterNCS",
 			"runToEntryPoint": "main"
+		},
+		{
+			"type": "nrf-debug",
+			"request": "launch",
+			"name": "Launch ZigbeeGasCounterNCS/build/mcuboot",
+			"config": "${workspaceFolder}/build/mcuboot",
+			"inferiors": []
 		}
 	]
 }

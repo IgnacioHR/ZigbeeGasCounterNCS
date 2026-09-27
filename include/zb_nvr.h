@@ -12,12 +12,17 @@
 
 #pragma once
 
+#include "zb_features.h"
+
 #ifndef ZB_NVR_H
 #define ZB_NVR_H
 
 enum nvr_items {
-	NVR_ITEM_COUNTER			= BIT(0),
-	NVR_ITEM_BAT_TIME			= BIT(1),
+	NVR_ITEM_COUNTER				= BIT(0),
+	NVR_ITEM_BAT_TIME				= BIT(1),
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+	NVR_ITEM_COUNTER_OFFSET = BIT(2),
+#endif
 };
 
 void nvr_schedule_save(uint32_t nvr_items_mask);

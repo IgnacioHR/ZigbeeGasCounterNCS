@@ -358,7 +358,7 @@ zb_zcl_status_t radio_send_values(uint32_t events)
 			(zb_uint8_t *)&(get_dev_ctx_ptr()->metering_attr).instantaneous_demand
 		);
 		if (ret != RET_OK) {
-			LOG_ERR("Write attribute GAS_METER_ATTR_SET_SUMMATION_ID failed (err: %d)", ret);
+			LOG_ERR("Write attribute ZB_ZCL_ATTR_METERING_INSTANTANEOUS_DEMAND_ID failed (err: %d)", ret);
 			status = ZB_ZCL_STATUS_FAIL;
 		}
 	}

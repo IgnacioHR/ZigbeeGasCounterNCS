@@ -1,0 +1,43 @@
+/ {
+    chosen {
+        /*
+         * MCUboot itself must be linked into the boot partition,
+         * not into application slot 0.
+         */
+        zephyr,code-partition = &boot_partition;
+    };
+};
+
+/delete-node/ &slot0_partition;
+/delete-node/ &slot1_partition;
+/delete-node/ &storage_partition;
+
+&flash0 {
+    partitions {
+        /*
+         * boot_partition already exists in the board DTS:
+         *
+         *   0x00000 - 0x0C000  (48 KiB)
+         *
+         * Do NOT redefine or delete it here.
+         */
+
+        slot0_partition: partition@c000 {
+            compatible = "zephyr,mapped-partition";
+            label = "image-0";
+            reg = <0x0c000 0x74000>;
+        };
+
+        slot1_partition: partition@80000 {
+            compatible = "zephyr,mapped-partition";
+            label = "image-1";
+            reg = <0x80000 0x74000>;
+        };
+
+        storage_partition: partition@f4000 {
+            compatible = "zephyr,mapped-partition";
+            label = "storage";
+            reg = <0xf4000 0x8000>;
+        };
+    };
+};

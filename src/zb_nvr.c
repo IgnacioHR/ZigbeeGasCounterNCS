@@ -36,6 +36,10 @@ static uint32_t nvr_dirty_mask;
 #define GM_SETTINGS_COUNTER_KEY 		"gm/counter"
 #define GM_SETTINGS_TIME_KEY 				"gm/time"
 
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+#define GM_SETTINGS_OFFSET_KEY 			"gm/offset"
+#endif
+
 static struct k_work_delayable nvr_work;
 
 static void nvr_work_handler(struct k_work *work)
@@ -75,6 +79,22 @@ static void nvr_work_handler(struct k_work *work)
 			}
 		}
 	}
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+	if (items & NVR_ITEM_COUNTER_OFFSET) {
+		uint64_t to_save_count = get_current_summ_offset();
+		int err = settings_save_one(GM_SETTINGS_OFFSET_KEY, &to_save_count, sizeof(to_save_count));
+		if (err != 0) {
+			LOG_ERR("Error saving counter offset to settings: %d", err);
+			set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
+			set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
+		} else {
+			LOG_INF("Counter offset value stored %llu", to_save_count);
+		}
+#ifdef CONFIG_DEBUG
+		reed_led_off();
+#endif
+	}
+#endif
 	k_mutex_lock(&nvr_mutex, K_FOREVER);
 	bool pending = nvr_dirty_mask != 0;
 	k_mutex_unlock(&nvr_mutex);
@@ -88,6 +108,20 @@ static void nvr_work_handler(struct k_work *work)
 	poweroff_mgr_block_clear(POF_BLOCK_SAVE_NVS);
 #endif
 }
+
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+static int offset_set_from_u64(uint64_t value)
+{
+	zb_uint48_t z_value = {
+		.high = (value>>32) & 0xFFFFu,
+		.low = value & 0xFFFFFFFFu
+	};
+	set_init_offset_summ(z_value);
+
+	LOG_INF("Counter offset value set to %lld",value);
+	return 0;
+}
+#endif
 
 static int counter_set_from_u64(uint64_t value)
 {
@@ -108,6 +142,43 @@ static int time_set_from_u32(uint32_t value)
 	LOG_INF("Time value set to %d",value);
 	return 0;
 }
+
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+static int offset_load_cb(const char *name, size_t len, settings_read_cb read_cb, void* cb_arg, void *param)
+{
+	uint64_t saved_count;
+	bool *found = param;
+
+	ARG_UNUSED(name);
+
+	if (len != sizeof(saved_count)) {
+		LOG_ERR("Invalid stored counter offset size: %zu", len);
+		return -EINVAL;
+	}
+	int ret = read_cb(cb_arg, &saved_count, sizeof(saved_count));
+
+	if (ret < 0) {
+		LOG_ERR("Error reading counter offset from settings: %d", ret);
+		return ret;
+	}
+
+	if (ret != sizeof(saved_count)) {
+		LOG_ERR("Short read of counter offset from settings: %d", ret);
+		return -EIO;
+	}
+
+	ret = offset_set_from_u64(saved_count);
+	if (ret != 0) {
+		return ret;
+	}
+
+	if (found != NULL) {
+		*found = true;
+	}
+
+	return 0;
+}
+#endif 
 
 static int counter_load_cb(const char *name, size_t len, settings_read_cb read_cb, void* cb_arg, void *param)
 {
@@ -218,6 +289,28 @@ static int load_current_time_from_nvr(void)
 	return 0;
 }
 
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+static int load_offset_from_nvr(void)
+{
+	bool found = false;
+	int err = settings_load_subtree_direct(GM_SETTINGS_OFFSET_KEY, offset_load_cb, &found);
+
+	if (err != 0) {
+			LOG_ERR("Error loading counter offset from settings: %d", err);
+			set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
+			set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
+			return err;
+	}
+
+	if (!found) {
+		LOG_INF("Counter offset not found in memory so starting from 0");
+		offset_set_from_u64(0);
+	}
+
+	return 0;
+}
+#endif
+
 /**
  * @brief initializes tasks to save counter value to NVR and load counter value from NVR
  * 
@@ -263,6 +356,15 @@ static void nvr_init(void)
 				result = err;
 			}
 		}
+#ifdef FEATURE_WRITE_COUNTER_VALUE
+		err = load_offset_from_nvr();
+		if (err != 0) {
+			LOG_ERR("Error loading current sum from NVR (err: %d)", err);
+			if (result == 0) {
+				result = err;
+			}
+		}
+#endif
 	}
 	nvr_load_result = result;
 	nvr_started = true;

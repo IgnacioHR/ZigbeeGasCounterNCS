@@ -28,7 +28,7 @@
 
     gpio_outputs {
         compatible = "gpio-leds";
-        
+
         batt_divider_en: batt_divider_en {
             gpios = <&gpio0 29 GPIO_ACTIVE_HIGH>;
             label = "Battery divider enable";
@@ -99,4 +99,42 @@
 &gpio0 {
 	latch-detect;
 	sense-edge-mask = <0x0000000c>; /* BIT(2) | BIT(3) */
+};
+
+/delete-node/ &slot0_partition;
+/delete-node/ &slot1_partition;
+/delete-node/ &storage_partition;
+
+&flash0 {
+    partitions {
+        slot0_partition: partition@c000 {
+            compatible = "zephyr,mapped-partition";
+            label = "image-0";
+            reg = <0x0c000 0x74000>;
+        };
+
+        slot1_partition: partition@80000 {
+            compatible = "zephyr,mapped-partition";
+            label = "image-1";
+            reg = <0x80000 0x74000>;
+        };
+
+        storage_partition: partition@f4000 {
+            compatible = "zephyr,mapped-partition";
+            label = "storage";
+            reg = <0xf4000 0x8000>;
+        };
+
+        zboss_nvram: partition@fc000 {
+            compatible = "zephyr,mapped-partition";
+            label = "zboss-nvram";
+            reg = <0xfc000 0x2000>;
+        };
+
+        zboss_product_config: partition@fe000 {
+            compatible = "zephyr,mapped-partition";
+            label = "zboss-product-config";
+            reg = <0xfe000 0x1000>;
+        };
+    };
 };
