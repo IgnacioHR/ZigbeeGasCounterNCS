@@ -193,7 +193,7 @@ gm_wakeup_cause_t wakeup_cause_init(void)
 		}
 		if (is_main_button) {
 			LOG_INF("Main button press detected during wakeup");
-			wakeup_cause = snap->main_button_latch == GM_WAKEUP_GPIO_MAIN_BTN_PRESS;
+			wakeup_cause = GM_WAKEUP_GPIO_MAIN_BTN_PRESS;
 			#ifdef FEATURE_DEEP_SLEEP
 				set_started_from_deep_sleep(true);
 			#endif

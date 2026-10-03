@@ -4,3 +4,6 @@
 
 # build
 /build*/
+
+# flash
+flash_pi.sh

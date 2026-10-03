@@ -46,5 +46,3 @@ config DFU_MULTI_IMAGE_PACKAGE_NET
 endif # SOC_SERIES_NRF53X
 
 endif # BOOTLOADER_MCUBOOT
-
-source "${ZEPHYR_BASE}/share/sysbuild/Kconfig"

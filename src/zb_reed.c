@@ -39,7 +39,11 @@ static bool reed_started = false;
 static K_MUTEX_DEFINE(reed_mutex);
 
 #define REED_INPUT_NODE DT_ALIAS(reed_input)
-static const struct gpio_dt_spec reed_input = GPIO_DT_SPEC_GET(REED_INPUT_NODE, gpios);
+static const struct gpio_dt_spec reed_input = 
+	GPIO_DT_SPEC_GET(REED_INPUT_NODE, gpios);
+
+static struct gpio_callback reed_input_cb_data;
+static bool reed_callback_registered;
 
 #ifdef CONFIG_DEBUG
 #define LED1_NODE DT_ALIAS(led1)
@@ -200,10 +204,31 @@ int reed_gpio_wakeup(void)
 {
 	int err;
 	int level;
+	uint16_t next_level;
+	gpio_flags_t wake_flags;
 
 	if (!device_is_ready(reed_input.port)) {
 		LOG_ERR("Reed GPIO device not ready");
 		return -ENODEV;
+	}
+
+	/*
+	 * Stop normal runtime processing before converting this GPIO
+	 * into a SYSTEMOFF wake-up source.
+	 */
+	err = gpio_pin_interrupt_configure_dt(&reed_input, GPIO_INT_DISABLE);
+	if (err != 0) {
+		LOG_ERR("Can't disable reed interrupt (err: %d)", err);
+		return err;
+	}
+
+	if (reed_callback_registered) {
+		err = gpio_remove_callback(reed_input.port, &reed_input_cb_data);
+		if (err != 0) {
+			LOG_ERR("Can't remove reed callback (err: %d)", err);
+			return err;
+		}
+		reed_callback_registered = false;
 	}
 
 	err = gpio_pin_configure_dt(&reed_input, GPIO_INPUT);
@@ -213,26 +238,39 @@ int reed_gpio_wakeup(void)
 	}
 
 	level = reed_read_stable_level();
+	if (level < 0) {
+		return level;
+	}
 
 	if (level == 0) {
-		err = gpio_pin_interrupt_configure_dt(&reed_input, GPIO_INT_LEVEL_ACTIVE);
-		if (err != 0) {
-			return err;
-		}
-
-		return retained_set_next_reed_level(1);
+		next_level = 1;
+		wake_flags = GPIO_INT_LEVEL_ACTIVE;
+	} else if (level == 1) {
+		next_level = 0;
+		wake_flags = GPIO_INT_LEVEL_INACTIVE;
+	} else {
+		return -EINVAL;
 	}
 
-	if (level == 1) {
-		err = gpio_pin_interrupt_configure_dt(&reed_input, GPIO_INT_LEVEL_INACTIVE);
-		if (err != 0) {
-			return err;
-		}
-
-		return retained_set_next_reed_level(0);
+	/*
+	 * Persist what the wake-up event will mean BEFORE arming the
+	 * corresponding level detector.
+	 */
+	err = retained_set_next_reed_level(next_level);
+	if (err != 0) {
+		return err;
 	}
 
-	return -EINVAL;
+	/*
+	 * From here on there is no application callback registered.
+	 * The GPIO is exclusively a SYSTEMOFF wake-up source.
+	 */
+	err = gpio_pin_interrupt_configure_dt(&reed_input, wake_flags);
+	if (err != 0) {
+		return err;
+	}
+
+	return 0;
 }
 
 static int reed_input_init(int *level)
@@ -250,17 +288,43 @@ static int reed_input_init(int *level)
 		return err;
 	}
 
-	err = gpio_pin_interrupt_configure_dt(&reed_input, GPIO_INT_EDGE_TO_INACTIVE);
-	if (err < 0) {
-		LOG_ERR("GPIO can't configure reed input interrupt (err: %d)", err);
-	}
+	/*
+	 * Register the callback BEFORE enabling the interrupt.
+	 * This prevents an edge from occurring while the interrupt
+	 * is enabled but no callback is registered yet.
+	 */
+	gpio_init_callback(&reed_input_cb_data, 
+			reed_input_cb, 
+			BIT(reed_input.pin));
 
-	static struct gpio_callback reed_input_cb_data;
-	gpio_init_callback(&reed_input_cb_data, reed_input_cb, BIT(reed_input.pin));
-	*level = gpio_pin_get_dt(&reed_input);
 	err = gpio_add_callback(reed_input.port, &reed_input_cb_data);
 	if (err < 0) {
 		LOG_ERR("GPIO can't add callback of reed input interrupt (err: %d)", err);
+	}
+	reed_callback_registered = true;
+
+	err = gpio_pin_interrupt_configure_dt(
+		&reed_input, 
+		GPIO_INT_EDGE_TO_INACTIVE);
+	if (err < 0) {
+		LOG_ERR("GPIO can't configure reed input interrupt (err: %d)", err);
+		gpio_remove_callback(reed_input.port, &reed_input_cb_data);
+		reed_callback_registered = false;
+		return err;
+	}
+
+	/*
+	 * Read AFTER the callback and interrupt are installed.
+	 *
+	 * If a falling edge occurs from this point onwards, the callback
+	 * can catch it. If it happened before enabling the interrupt,
+	 * the current LOW level is visible here and the startup
+	 * b_missed_reed logic can detect it when applicable.
+	 */
+	*level = gpio_pin_get_dt(&reed_input);
+	if (*level < 0) {
+		LOG_ERR("Can't read reed input (err: %d)", *level);
+		return *level;
 	}
 
 	LOG_DBG("Reed input initialized");
