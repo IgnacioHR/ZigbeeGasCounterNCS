@@ -8,7 +8,6 @@
     aliases {
         main-button = &main_button;
         reed-input = &reed_input;
-        batt-divider-en = &batt_divider_en;
         watchdog0 = &wdt0;
         xiao-read-bat-enable = &xiao_battery_frontend;
         xiao-led-red = &led0;
@@ -20,27 +19,18 @@
         compatible = "gpio-keys";
 
         main_button: main_button {
-            gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+            gpios = <&gpio0 2 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
             label = "Main button";
         };
 
         reed_input: reed_input {
-            gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+            gpios = <&gpio0 3 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
             label = "Gas reed input";
         };
     };
 
-    gpio_outputs {
-        compatible = "gpio-leds";
-
-        batt_divider_en: batt_divider_en {
-            gpios = <&gpio0 29 GPIO_ACTIVE_HIGH>;
-            label = "Battery divider enable";
-        };
-    };
-
     zephyr,user {
-        io-channels = <&adc 4>; /* P0.28 = AIN4 = XIAO D2/A2 */
+        io-channels = <&adc 7>; /* P0.31 = AIN7_BAT */
     };
 
     sram_retained: sram@2003ff00 {
@@ -91,12 +81,12 @@
     #address-cells = <1>;
     #size-cells = <0>;
 
-    channel@4 {
-        reg = <4>;
+    channel@7 {
+        reg = <7>;
         zephyr,gain = "ADC_GAIN_1_6";
         zephyr,reference = "ADC_REF_INTERNAL";
         zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 40)>;
-        zephyr,input-positive = <NRF_SAADC_AIN4>;
+        zephyr,input-positive = <NRF_SAADC_AIN7>;
         zephyr,resolution = <12>;
         zephyr,oversampling = <4>;
     };
@@ -106,6 +96,10 @@
 	latch-detect;
 	sense-edge-mask = <0x0000000c>; /* BIT(2) | BIT(3) */
 };
+
+/delete-node/ &i2c1;
+/delete-node/ &qspi;
+/delete-node/ &spi2;
 
 /delete-node/ &slot0_partition;
 /delete-node/ &slot1_partition;

@@ -19,8 +19,6 @@
 LOG_MODULE_REGISTER(boot_snapshot, LOG_LEVEL_INF);
 
 #include "zb_boot_snapshot.h"
-#include "zb_main_button.h"
-#include "zb_reed.h"
 
 static struct gm_boot_snapshot boot_snapshot = {
 	.valid = false,
@@ -30,6 +28,14 @@ static struct gm_boot_snapshot boot_snapshot = {
 	.main_button_latch = -1,
 	.reed_latch = -1,
 };
+
+static struct {
+    uint32_t latch;
+    uint32_t input;
+    uint32_t pin2;
+    uint32_t pin3;
+    uint32_t detectmode;
+} early_gpio;
 
 /**
  * @brief Gives access to the boot_snapshot report collected early during boot
@@ -56,6 +62,24 @@ static int gm_boot_snapshot_init(void)
 	uint32_t boot_latch = NRF_P0->LATCH;
 	boot_snapshot.main_button_latch = (boot_latch & BIT(2)) == BIT(2) ? 1 : 0;
 	boot_snapshot.reed_latch = (boot_latch & BIT(3)) == BIT(3) ? 1 : 0;
+
+	LOG_INF("nRF52840 FICR VARIANT=0x%08x",
+		NRF_FICR->INFO.VARIANT);
+
+	LOG_INF("EARLY: LATCH=%08x IN=%08x PIN2=%08x PIN3=%08x DETECTMODE=%08x",
+		early_gpio.latch,
+		early_gpio.input,
+		early_gpio.pin2,
+		early_gpio.pin3,
+		early_gpio.detectmode);
+
+	LOG_INF("LATE: LATCH=%08x IN=%08x PIN2=%08x PIN3=%08x DETECTMODE=%08x",
+		boot_latch,
+		NRF_P0->IN,
+		NRF_P0->PIN_CNF[2],
+		NRF_P0->PIN_CNF[3],
+		NRF_P0->DETECTMODE);
+
 	NRF_P0->LATCH = boot_latch;
 	boot_snapshot.clear_ret = hwinfo_clear_reset_cause();
 	boot_snapshot.valid = true;
@@ -84,3 +108,16 @@ bool gm_boot_snapshot_was_software(void)
 	       boot_snapshot.reset_cause_ret == 0 &&
 	       (boot_snapshot.reset_cause & RESET_SOFTWARE);
 }
+
+static int gm_early_gpio_snapshot(void)
+{
+    early_gpio.latch = NRF_P0->LATCH;
+    early_gpio.input = NRF_P0->IN;
+    early_gpio.pin2 = NRF_P0->PIN_CNF[2];
+    early_gpio.pin3 = NRF_P0->PIN_CNF[3];
+    early_gpio.detectmode = NRF_P0->DETECTMODE;
+
+    return 0;
+}
+
+SYS_INIT(gm_early_gpio_snapshot, PRE_KERNEL_1, 0);

@@ -17,7 +17,6 @@
 #include <string.h>
 
 #include "zb_retained.h"
-#include "zb_nvr.h"
 
 LOG_MODULE_REGISTER(retained, LOG_LEVEL_INF);
 

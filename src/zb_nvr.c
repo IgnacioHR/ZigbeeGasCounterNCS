@@ -41,6 +41,7 @@ static uint32_t nvr_dirty_mask;
 #endif
 
 static struct k_work_delayable nvr_work;
+static struct k_work_sync nvr_work_sync;
 
 static void nvr_work_handler(struct k_work *work)
 {
@@ -103,7 +104,7 @@ static void nvr_work_handler(struct k_work *work)
 		k_work_reschedule(&nvr_work, K_NO_WAIT);
 		return;
 	}
-	
+
 #ifdef FEATURE_DEEP_SLEEP
 	poweroff_mgr_block_clear(POF_BLOCK_SAVE_NVS);
 #endif
@@ -337,6 +338,7 @@ static void nvr_init(void)
 	
 	int	err = settings_subsys_init();
 	if (err != 0) {
+		result = err;
 		LOG_ERR("settings_subsys_init failed: (err: %d)",err);
 		// TODO: shall start zigbee radio to report the status change
 		set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
@@ -398,4 +400,31 @@ void nvr_schedule_save(uint32_t nvr_items_mask)
 	nvr_dirty_mask |= nvr_items_mask;
 	k_mutex_unlock(&nvr_mutex);
   k_work_reschedule(&nvr_work, K_NO_WAIT);
+}
+
+int nvr_flush_pending_sync(void)
+{
+    if (!nvr_started) {
+        return 0;
+    }
+
+    /*
+     * Flush any scheduled NVR work and wait for completion.
+     * This function must be called from thread context,
+     * never from the system workqueue.
+     */
+    for (unsigned int attempt = 0; attempt < 3; attempt++) {
+        k_work_flush_delayable(&nvr_work, &nvr_work_sync);
+
+        k_mutex_lock(&nvr_mutex, K_FOREVER);
+        bool pending = nvr_dirty_mask != 0;
+        k_mutex_unlock(&nvr_mutex);
+
+        if (!pending) {
+            return 0;
+        }
+    }
+
+    LOG_ERR("NVR work still pending after flush");
+    return -EBUSY;
 }

@@ -20,7 +20,6 @@ LOG_MODULE_REGISTER(adc, LOG_LEVEL_INF);
 
 #include "zb_features.h"
 #include "zb_adc.h"
-#include "zb_main_loop.h"
 #include "zb_zigbee.h"
 #include "zb_zigbee_ctx.h"
 
@@ -44,17 +43,19 @@ static K_SEM_DEFINE(adc_sem, 0, K_SEM_MAX_LIMIT);
 static K_MUTEX_DEFINE(adc_mutex);
 static bool adc_started = false;
 
-#define BATT_DIVIDER_EN_NODE DT_ALIAS(batt_divider_en)
+#define BATT_ENABLE_NODE DT_ALIAS(xiao_read_bat_enable)
 
-#if !DT_NODE_HAS_STATUS(BATT_DIVIDER_EN_NODE, okay)
-#error "Missing batt-divider-en alias in devicetree"
+#if !DT_NODE_HAS_STATUS(BATT_ENABLE_NODE, okay)
+#error "Missing XIAO battery frontend in devicetree"
 #endif
 
-static const struct gpio_dt_spec batt_divider_en = GPIO_DT_SPEC_GET(BATT_DIVIDER_EN_NODE, gpios);
-static const struct adc_dt_spec batt_adc = ADC_DT_SPEC_GET(DT_PATH(zephyr_user));
+static const struct gpio_dt_spec batt_enable =
+    GPIO_DT_SPEC_GET(BATT_ENABLE_NODE, enable_gpios);
+static const struct adc_dt_spec batt_adc = 
+	ADC_DT_SPEC_GET(DT_PATH(zephyr_user));
 
-#define BATT_DIVIDER_R_TOP_OHM     100000LL
-#define BATT_DIVIDER_R_BOTTOM_OHM  380000LL
+// #define BATT_DIVIDER_R_TOP_OHM     1000000LL
+// #define BATT_DIVIDER_R_BOTTOM_OHM   510000LL
 
 /*
  * Tiempo para que el nodo ADC se estabilice tras activar los FET.
@@ -83,17 +84,19 @@ bool check_shall_measure_battery(void)
 
 static int adc_enable_init(void)
 {
-	int err;
-	if (!gpio_is_ready_dt(&batt_divider_en)) {
-		LOG_ERR("Battery divider enable GPIO not ready");
-		return -ENODEV;
-	}
-	err = gpio_pin_configure_dt(&batt_divider_en, GPIO_OUTPUT_INACTIVE);
-	if (err) {
-		LOG_ERR("Failed to configure battery divider GPIO: %d", err);
-		return err;
-	}
-	return 0;
+    if (!gpio_is_ready_dt(&batt_enable)) {
+        LOG_ERR("XIAO battery GPIO not ready");
+        return -ENODEV;
+    }
+
+    /* Keep P0.14 in Hi-Z until a measurement is requested. */
+    int err = gpio_pin_configure_dt(&batt_enable, GPIO_INPUT);
+
+    if (err != 0) {
+        LOG_ERR("Failed to configure battery GPIO: %d", err);
+    }
+
+    return err;
 }
 
 static int adc_init(void)
@@ -146,40 +149,70 @@ static int battery_adc_read_pin_mv(int32_t *adc_mv)
 
 static int battery_adc_read_mv(int32_t *battery_mv)
 {
-	int err;
-	int32_t adc_mv1;
-	int32_t adc_mv2;
-	if (battery_mv == NULL) {
-		return -EINVAL;
-	}
-	err = gpio_pin_set_dt(&batt_divider_en, 1);
-	if (err) {
-		LOG_ERR("Failed to enable battery divider: %d", err);
-		return err;
-	}
-	k_sleep(BATT_DIVIDER_SETTLE_TIME);
-	err = battery_adc_read_pin_mv(&adc_mv1);
-	k_sleep(BATT_DIVIDER_NXWAIT_TIME);
-	err = battery_adc_read_pin_mv(&adc_mv2);
+    if (battery_mv == NULL) {
+        return -EINVAL;
+    }
+
+    int32_t adc_mv1;
+    int32_t adc_mv2;
+
+    /*
+     * Enable the XIAO battery divider.
+     * P0.14 is ACTIVE_LOW, so OUTPUT_ACTIVE drives LOW.
+     */
+    int err = gpio_pin_configure_dt(
+        &batt_enable, GPIO_OUTPUT_ACTIVE);
+
+    if (err != 0) {
+        LOG_ERR("Failed to enable battery divider: %d", err);
+        return err;
+    }
+
+    k_sleep(BATT_DIVIDER_SETTLE_TIME);
+
+    err = battery_adc_read_pin_mv(&adc_mv1);
+
+    if (err == 0) {
+        k_sleep(BATT_DIVIDER_NXWAIT_TIME);
+        err = battery_adc_read_pin_mv(&adc_mv2);
+    }
+
+    /*
+     * Always release P0.14 to Hi-Z, including on ADC errors.
+     * Never drive P0.14 HIGH.
+     */
+    int disable_err = gpio_pin_configure_dt(
+        &batt_enable, GPIO_INPUT);
+
+    if (disable_err != 0) {
+        LOG_ERR("Failed to release battery divider: %d",
+                disable_err);
+
+        if (err == 0) {
+            err = disable_err;
+        }
+    }
+
+    if (err != 0) {
+        return err;
+    }
+
+    // int64_t scaled_mv =
+    //     (int64_t)adc_mv2 *
+    //     (BATT_DIVIDER_R_TOP_OHM + BATT_DIVIDER_R_BOTTOM_OHM) /
+    //     BATT_DIVIDER_R_BOTTOM_OHM;
 	/*
-	 * Muy importante: apagar el divisor incluso si falla la lectura.
-	 */
-	int disable_err = gpio_pin_set_dt(&batt_divider_en, 0);
-	if (disable_err) {
-		LOG_ERR("Failed to disable battery divider: %d", disable_err);
-		if (!err) {
-			err = disable_err;
-		}
-	}
-	if (err) {
-		return err;
-	}
-	int64_t scaled_mv = (int64_t)adc_mv2 *
-		(BATT_DIVIDER_R_TOP_OHM + BATT_DIVIDER_R_BOTTOM_OHM) /
-		BATT_DIVIDER_R_BOTTOM_OHM;
-	*battery_mv = (int32_t)scaled_mv;
-	LOG_INF("Battery voltage: adc=%d mV battery=%d mV", adc_mv2, *battery_mv);
-	return 0;
+	* Empirical calibration for XIAO nRF52840 battery divider.
+	* Validated at 3.3 V and 3.8 V supply.
+	*/
+	int64_t scaled_mv = (int64_t)adc_mv2 * 3;
+
+    *battery_mv = (int32_t)scaled_mv;
+
+    LOG_INF("Battery voltage: adc=%d mV battery=%d mV",
+            adc_mv2, *battery_mv);
+
+    return 0;
 }
 
 static void adc_task(void *p1, void *p2, void *p3)

@@ -18,17 +18,10 @@
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 #include <zephyr/logging/log_ctrl.h>
-#include <zephyr/drivers/hwinfo.h>
+
 #include <zephyr/sys/poweroff.h>
 #include <zephyr/sys/reboot.h>
-
-#include <zboss_api.h>
-
-#include <zigbee/zigbee_error_handler.h>
-#include <zigbee/zigbee_app_utils.h>
-
-#include <zb_nrf_platform.h>
-#include <hal/nrf_power.h>
+#include <zephyr/irq.h>
 #include <ram_pwrdn.h>
 
 #include "zb_features.h"
@@ -159,6 +152,8 @@ int poweroff(void) {
 		return err;
 	}
 
+	irq_disable(GPIOTE_IRQn);
+
 	err = main_button_gpio_wakeup();
 	if (err != 0) {
 		LOG_ERR("Can't configure main button for wakeup (err: %d)", err);
@@ -174,6 +169,13 @@ int poweroff(void) {
 #if (IS_ENABLED(CONFIG_LOG))
 		log_panic();
 #endif
+		LOG_INF("PRE-OFF: PIN2=%08x PIN3=%08x LATCH=%08x IN=%08x DETECTMODE=%08x",
+			NRF_P0->PIN_CNF[2],
+			NRF_P0->PIN_CNF[3],
+			NRF_P0->LATCH,
+			NRF_P0->IN,
+			NRF_P0->DETECTMODE);
+
 		sys_poweroff();
 	}
 	return 0;
@@ -219,6 +221,31 @@ int main(void)
 	}
 
 	wakeup_cause = wakeup_cause_init();
+
+	int reed_result = 0;
+
+	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_ACTIVE) {
+		reed_result = reed_fsm_recover_boot(1);
+	} else if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE) {
+		reed_result = reed_fsm_recover_boot(0);
+	}
+
+	if (reed_result < 0) {
+		LOG_ERR("Reed boot recovery failed: %d", reed_result);
+		sys_reboot(SYS_REBOOT_COLD);
+		CODE_UNREACHABLE;
+	}
+
+	bool reed_increment = reed_result == 1;
+
+	bool b_missed_reed =
+		wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_ACTIVE &&
+		reed_increment;
+
+	if (reed_increment) {
+		reed_count_pulse();
+	}
+
 #ifdef FEATURE_DEEP_SLEEP
 	poweroff_mgr_enable_for_wakeup(wakeup_cause);
 #endif
@@ -229,19 +256,20 @@ int main(void)
 		// and the interrupt has not been able to catch. so fire event manually now
 		main_button_fire_release();
 	}
-	bool b_missed_reed = false;
-	// LOG_INF("wakeup_cause = %d reed_level = %d", wakeup_cause, reed_level);
-	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_ACTIVE && reed_level == 0) {
-		// the user has release the button and we missed the event
-		b_missed_reed = true;
-	}	
-	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE || b_missed_reed)
-		check_counter_increment();
+	// bool b_missed_reed = false;
+	// // LOG_INF("wakeup_cause = %d reed_level = %d", wakeup_cause, reed_level);
+	// if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_ACTIVE && reed_level == 0) {
+	// 	// the user has release the button and we missed the event
+	// 	b_missed_reed = true;
+	// }	
+	// if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE || b_missed_reed)
+	// 	check_counter_increment();
 
 	if (!is_reed_wakeup_cause(wakeup_cause)) {
  		main_button_start();
 	}
 	if (!ota_new_image) {
+		//check_shall_enable_radio(wakeup_cause, b_missed_reed);
 		check_shall_enable_radio(wakeup_cause, b_missed_reed);
 	} else {
 		start_radio_and_report(true);
@@ -253,12 +281,42 @@ int main(void)
 #endif
 
 	// if main loop has not started we can safely sleep now
-	if (!is_main_loop_started()) {
+	// if (!is_main_loop_started()) {
+	// 	LOG_INF("Powering off now: direct system_off path");
+	// 	err = poweroff();
+	// 	if (err != 0) {
+	// 		sys_reboot(SYS_REBOOT_COLD);
+	// 	}
+	// }
+	if (is_main_loop_started()) {
+		/*
+		* Runtime path: restore normal reed interrupts only
+		* after the boot FSM recovery has finished.
+		*/
+		err = reed_input_start();
+		if (err != 0) {
+			LOG_ERR("Cannot start reed input (err: %d)", err);
+			return err;
+		}
+	} else {
+		/*
+		* Direct System OFF path: finish pending NVR writes
+		* before shutting down.
+		*/
+		err = nvr_flush_pending_sync();
+		if (err != 0) {
+			LOG_ERR("Cannot power off: NVR flush failed (err: %d)", err);
+			return err;
+		}
+
 		LOG_INF("Powering off now: direct system_off path");
+
 		err = poweroff();
 		if (err != 0) {
 			sys_reboot(SYS_REBOOT_COLD);
 		}
+
+		CODE_UNREACHABLE;
 	}
 
 #ifdef FEATURE_DEEP_SLEEP

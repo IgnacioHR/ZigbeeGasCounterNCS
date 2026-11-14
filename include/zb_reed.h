@@ -21,6 +21,9 @@ int reed_gpio_wakeup(void);
 void check_counter_increment(void);
 int reed_read_early_level(void);
 int reed_read_stable_level(void);
+int reed_fsm_recover_boot(int wake_level);
+void reed_count_pulse(void);
+int reed_input_start(void);
 
 #ifdef CONFIG_DEBUG
 void reed_led_on();

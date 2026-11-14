@@ -220,6 +220,12 @@ int main_button_gpio_wakeup(void)
 	}
 
 	current = main_button_read_early_level();
+	
+	LOG_INF("MAIN: logical=%d physical=%d flags=0x%04x",
+    current,
+    gpio_pin_get_raw(main_button.port, main_button.pin),
+    (unsigned int)main_button.dt_flags);
+
 	if (current < 0) {
 		return current;
 	}

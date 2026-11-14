@@ -24,9 +24,7 @@ LOG_MODULE_REGISTER(wakeup_cause, LOG_LEVEL_INF);
 #include "zb_main_loop.h"
 #include "zb_report_event.h"
 #include "zb_main_button.h"
-#include "zb_reed.h"
 #include "zb_zigbee_ctx.h"
-#include "zb_main.h"
 #include "zb_retained.h"
 #include "zb_boot_snapshot.h"
 

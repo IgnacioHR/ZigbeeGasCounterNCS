@@ -17,8 +17,6 @@
 
 #include <zephyr/kernel.h>
 
-#define REED_DEBOUNCE_TIMEOUT_MS 150
-
 int retained_init(void);
 int retained_set_next_reed_level(uint16_t level);
 uint16_t retained_get_next_reed_level(void);

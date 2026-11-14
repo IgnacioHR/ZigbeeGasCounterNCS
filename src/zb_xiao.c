@@ -10,7 +10,6 @@
  * as you credit the original author(s) and share any derivatives under the same license.
  */
 
-#include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
