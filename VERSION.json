@@ -9,8 +9,7 @@
     "app_version": 1,
     "app_build": 9,
     "stack_version": 1,
-    "stack_build": 1,
-    "sw_build_id": "V1.0"
+    "stack_build": 1
   },
   "zigbee": {
     "fota_endpoint": 240
