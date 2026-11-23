@@ -659,6 +659,14 @@ void set_device_extended_status_bit(zb_uint64_t bit)
 }
 
 /**
+ * @brief Quick check if there are errors set in the extended status
+ * 
+ */
+bool is_device_extended_status_error() {
+	return dev_ctx.metering_attr.device_extended_status != 0;
+}
+
+/**
  * @brief Clear bits of the meter device extended status directly to the device context
  *        and prior to initialize the zigbee device.
  * 
@@ -687,6 +695,14 @@ void reset_device_extended_status()
 void set_device_status_bit(zb_uint64_t bit)
 {
     dev_ctx.metering_attr.base.status |= bit;
+}
+
+/**
+ * @brief Quick check if there are errors set in the extended status
+ * 
+ */
+bool is_device_status_error() {
+	return dev_ctx.metering_attr.base.status != 0;
 }
 
 /**

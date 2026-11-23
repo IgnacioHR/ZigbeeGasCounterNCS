@@ -103,7 +103,10 @@ static bool reed_inactive_requires_radio(uint64_t *not_reported)
 static void start_radio_and_report(bool main_button)
 {
 	main_loop_post(SHALL_ENABLE_ZIGBEE);
-	report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
+	uint8_t tasks = REPORT_CURRENT_SUMMATION_DELIVERED;
+	if (is_device_status_error()) tasks |= REPORT_STATUS;
+	if (is_device_extended_status_error()) tasks |= REPORT_EXTENDED_STATUS;
+	report_event_post(tasks);
 #ifdef FEATURE_DEEP_SLEEP
 	poweroff_mgr_user_window_extend(deep_sleep_eval_time_ms(main_button, !main_button));
 #endif
@@ -121,12 +124,12 @@ static void check_shall_enable_radio(gm_wakeup_cause_t wakeup_cause, bool b_miss
 	uint64_t not_reported = 0;
 	bool enable_radio;
 
-	enable_radio = wakeup_cause_requires_radio(wakeup_cause);
+	enable_radio = wakeup_cause_requires_radio(wakeup_cause) || is_device_status_error() || is_device_extended_status_error();
 
 	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE || b_missed_reed) {
 		enable_radio = reed_inactive_requires_radio(&not_reported);
 	} else if (enable_radio) {
-		LOG_INF("Radio shall be started due to wakeup_cause");
+		LOG_INF("Radio shall be started due to wakeup_cause or error");
 	}
 
 	if (enable_radio) {
@@ -188,7 +191,8 @@ int main(void)
 	LOG_DBG("Starting Zigbee Gas Counter");
 
 	// set ctx initial values before zigbee radio is started so values can be changed anytime from this moment if needed
-	retained_init();
+	// note, in case of errors status set must be delayed until after app_device_ctx_init()
+	err = retained_init();
 
 	if (IS_ENABLED(CONFIG_RAM_POWER_DOWN_LIBRARY)) {
 		power_down_unused_ram();
@@ -197,7 +201,7 @@ int main(void)
 	// app_confirm_mcuboot_image();
 	bool ota_new_image = ota_is_new_image();
 
-	if (!ota_new_image && retained_shall_power_off()) {
+	if (!ota_new_image && retained_shall_power_off() && err == 0) {
 		LOG_DBG("Requesting WDT reset before system_off path");
 		err = poweroff();
 		if (err != 0) {
@@ -207,11 +211,15 @@ int main(void)
 	}
 
 	app_device_ctx_init();
+	if (err < 0) {
+		set_device_extended_status_bit(ZB_ZCL_METERING_RAM_ERROR);
+	}
 
 	int main_button_level;
 	int reed_level;
 	err = configure_gpio(&main_button_level, &reed_level);
 	if (err < 0) {
+		set_device_extended_status_bit(ZB_ZCL_METERING_MEASUREMENT_SYSTEM_ERROR);
 		return err;
 	}
 
