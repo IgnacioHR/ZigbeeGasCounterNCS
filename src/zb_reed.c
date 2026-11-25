@@ -85,47 +85,6 @@ int reed_read_stable_level(void)
 	return gpio_read_stable_level(&reed_input, 5, K_MSEC(10));
 }
 
-// static int64_t elapsed_ms_since(int64_t previous_ms)
-// {
-// 	if (previous_ms == 0) {
-// 		return INT64_MAX;
-// 	}
-
-// 	return k_uptime_get() - previous_ms;
-// }
-
-// static bool reed_process_interrupt(void)
-// {
-// 	bool increment = false;
-
-// 	static int64_t last_interrupt_time_ms;
-// 	static int64_t last_reed_state_change_time_ms;
-
-// 	if (last_interrupt_time_ms != 0 && elapsed_ms_since(last_interrupt_time_ms) <= REED_DEBOUNCE_TIMEOUT_MS) {
-// 		return false;
-// 	}
-
-// 	last_interrupt_time_ms = k_uptime_get();
-
-// 	bool is_ok = (last_reed_state_change_time_ms == 0);
-// 	if (!is_ok) {
-// 		int64_t elapsed = elapsed_ms_since(last_reed_state_change_time_ms);
-// 		is_ok = elapsed > REED_DEBOUNCE_TIMEOUT_MS;
-// 	}
-
-// 	if (is_ok) {
-// 		LOG_INF("REED ACCEPT: uptime=%lld logical=%d raw=%d",
-// 		(long long)k_uptime_get(),
-// 		gpio_pin_get_dt(&reed_input),
-// 		gpio_pin_get_raw(reed_input.port, reed_input.pin));
-
-// 		last_reed_state_change_time_ms = k_uptime_get();
-// 		increment = true;
-// 	}
-
-// 	return increment;
-// }
-
 #define REED_STABLE_EXTRA_MS 200U
 
 static int reed_sample_stable_level(uint32_t duration_ms)
@@ -193,9 +152,9 @@ static int reed_fsm_apply_level(int level)
     }
 
     if (level == 1) {
-        LOG_INF("REED FSM: ACTIVE -> WAIT_INACTIVE");
+        LOG_DBG("REED FSM: ACTIVE -> WAIT_INACTIVE");
     } else {
-        LOG_INF("REED FSM: INACTIVE -> WAIT_ACTIVE, COUNT");
+        LOG_DBG("REED FSM: INACTIVE -> WAIT_ACTIVE, COUNT");
     }
 
     k_mutex_unlock(&reed_fsm_mutex);
@@ -387,7 +346,7 @@ int reed_gpio_wakeup(void)
 		return err;
 	}
 
-	LOG_INF("REED FSM: System OFF armed for %s",
+	LOG_DBG("REED FSM: System OFF armed for %s",
 			expected == 1 ? "ACTIVE" : "INACTIVE");
 
 	// level = reed_read_stable_level();
@@ -605,7 +564,7 @@ int reed_fsm_recover_boot(int wake_level)
         }
 
         if (current == 0) {
-            LOG_INF("REED FSM: complete pulse recovered during boot");
+            LOG_DBG("REED FSM: complete pulse recovered during boot");
             return reed_fsm_apply_level(0);
         }
 

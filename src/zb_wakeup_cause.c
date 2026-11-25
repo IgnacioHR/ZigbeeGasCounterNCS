@@ -186,11 +186,11 @@ gm_wakeup_cause_t wakeup_cause_init(void)
 		bool is_main_button = snap->main_button_latch == 1;
 		bool is_reed = snap->reed_latch == 1;
 		if (is_reed) {
-			LOG_INF("Seed pulse detected during wakeup");
+			LOG_DBG("Seed pulse detected during wakeup");
 			wakeup_cause = retained_get_next_reed_level() == 1 ? GM_WAKEUP_GPIO_REED_PULSE_ACTIVE : GM_WAKEUP_GPIO_REED_PULSE_INACTIVE;
 		}
 		if (is_main_button) {
-			LOG_INF("Main button press detected during wakeup");
+			LOG_DBG("Main button press detected during wakeup");
 			wakeup_cause = GM_WAKEUP_GPIO_MAIN_BTN_PRESS;
 			#ifdef FEATURE_DEEP_SLEEP
 				set_started_from_deep_sleep(true);
@@ -203,7 +203,7 @@ gm_wakeup_cause_t wakeup_cause_init(void)
 			#endif
 		}
 		if (!is_main_button && !is_reed) {
-			LOG_INF("None of the buttons are detected");
+			LOG_DBG("None of the buttons are detected");
 			main_loop_post(SHALL_ENABLE_ZIGBEE);
 			report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
 		}
@@ -211,7 +211,7 @@ gm_wakeup_cause_t wakeup_cause_init(void)
 	case GM_WAKEUP_OTHER:
 		
 	default:
-		LOG_INF("WAKEUP other");
+		LOG_DBG("WAKEUP other");
 		main_loop_post(SHALL_ENABLE_ZIGBEE);
 		report_event_post(REPORT_CURRENT_SUMMATION_DELIVERED);
 		break;

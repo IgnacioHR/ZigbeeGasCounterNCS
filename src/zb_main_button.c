@@ -221,7 +221,7 @@ int main_button_gpio_wakeup(void)
 
 	current = main_button_read_early_level();
 	
-	LOG_INF("MAIN: logical=%d physical=%d flags=0x%04x",
+	LOG_DBG("MAIN: logical=%d physical=%d flags=0x%04x",
     current,
     gpio_pin_get_raw(main_button.port, main_button.pin),
     (unsigned int)main_button.dt_flags);
@@ -434,7 +434,7 @@ static void btn_release_thread(void *p1, void *p2, void *p3)
 	ARG_UNUSED(p2);
 	ARG_UNUSED(p3);
 
-	LOG_INF("Main button release task started");
+	LOG_DBG("Main button release task started");
 	while (true)
 	{
 		k_sem_take(&btn_release_sem, K_FOREVER);
@@ -497,7 +497,7 @@ static void btn_task(void *p1, void *p2, void *p3)
 	ARG_UNUSED(p1);
 	ARG_UNUSED(p2);
 	ARG_UNUSED(p3);
-	LOG_INF("Main button action task started");
+	LOG_DBG("Main button action task started");
 	while (true) {
 		button_state_msg_t msg;
 		err = k_msgq_get(&btn_state_msgq, &msg, K_FOREVER);
@@ -511,7 +511,7 @@ static void btn_task(void *p1, void *p2, void *p3)
 		button_state_msg_t state = (button_state_msg_t)msg;
 		switch (state) {
 		case PRESS:
-			// LOG_INF("Button press");
+			// LOG_DBG("Button press");
 #ifdef CONFIG_DEBUG
 			gpio_pin_set_dt(&led_main_button, 1);
 #endif
@@ -524,7 +524,7 @@ static void btn_task(void *p1, void *p2, void *p3)
 #endif
 			break;
 		case RELEASE:
-			// LOG_INF("Button release");
+			// LOG_DBG("Button release");
 #ifdef CONFIG_DEBUG
 			gpio_pin_set_dt(&led_main_button, 0);
 #endif

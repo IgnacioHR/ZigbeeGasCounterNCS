@@ -63,17 +63,17 @@ static int gm_boot_snapshot_init(void)
 	boot_snapshot.main_button_latch = (boot_latch & BIT(2)) == BIT(2) ? 1 : 0;
 	boot_snapshot.reed_latch = (boot_latch & BIT(3)) == BIT(3) ? 1 : 0;
 
-	LOG_INF("nRF52840 FICR VARIANT=0x%08x",
+	LOG_DBG("nRF52840 FICR VARIANT=0x%08x",
 		NRF_FICR->INFO.VARIANT);
 
-	LOG_INF("EARLY: LATCH=%08x IN=%08x PIN2=%08x PIN3=%08x DETECTMODE=%08x",
+	LOG_DBG("EARLY: LATCH=%08x IN=%08x PIN2=%08x PIN3=%08x DETECTMODE=%08x",
 		early_gpio.latch,
 		early_gpio.input,
 		early_gpio.pin2,
 		early_gpio.pin3,
 		early_gpio.detectmode);
 
-	LOG_INF("LATE: LATCH=%08x IN=%08x PIN2=%08x PIN3=%08x DETECTMODE=%08x",
+	LOG_DBG("LATE: LATCH=%08x IN=%08x PIN2=%08x PIN3=%08x DETECTMODE=%08x",
 		boot_latch,
 		NRF_P0->IN,
 		NRF_P0->PIN_CNF[2],

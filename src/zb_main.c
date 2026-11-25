@@ -84,7 +84,11 @@ static bool reed_inactive_requires_radio(uint64_t *not_reported)
 	uint64_t current;
 	uint64_t last;
 
-	nvr_ensure_loaded();
+	int err =nvr_ensure_loaded();
+	if (err != 0) {
+		LOG_ERR("Error ensuring NVR is loaded: %d", err);
+		return true;
+	}
 
 	current = get_current_summ();
 	last = retained_get_last_summation_sent();
@@ -92,7 +96,7 @@ static bool reed_inactive_requires_radio(uint64_t *not_reported)
 	*not_reported = current - last;
 
 	if (*not_reported >= COUNTER_REPORT_DIFF) {
-		LOG_INF("Radio shall be started due to counter rebased max difference current=%lld last=%lld",
+		LOG_DBG("Radio shall be started due to counter rebased max difference current=%lld last=%lld",
 			current, last);
 		return true;
 	}
@@ -129,7 +133,7 @@ static void check_shall_enable_radio(gm_wakeup_cause_t wakeup_cause, bool b_miss
 	if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE || b_missed_reed) {
 		enable_radio = reed_inactive_requires_radio(&not_reported);
 	} else if (enable_radio) {
-		LOG_INF("Radio shall be started due to wakeup_cause or error");
+		LOG_DBG("Radio shall be started due to wakeup_cause or error");
 	}
 
 	if (enable_radio) {
@@ -172,7 +176,7 @@ int poweroff(void) {
 #if (IS_ENABLED(CONFIG_LOG))
 		log_panic();
 #endif
-		LOG_INF("PRE-OFF: PIN2=%08x PIN3=%08x LATCH=%08x IN=%08x DETECTMODE=%08x",
+		LOG_DBG("PRE-OFF: PIN2=%08x PIN3=%08x LATCH=%08x IN=%08x DETECTMODE=%08x",
 			NRF_P0->PIN_CNF[2],
 			NRF_P0->PIN_CNF[3],
 			NRF_P0->LATCH,
@@ -264,20 +268,11 @@ int main(void)
 		// and the interrupt has not been able to catch. so fire event manually now
 		main_button_fire_release();
 	}
-	// bool b_missed_reed = false;
-	// // LOG_INF("wakeup_cause = %d reed_level = %d", wakeup_cause, reed_level);
-	// if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_ACTIVE && reed_level == 0) {
-	// 	// the user has release the button and we missed the event
-	// 	b_missed_reed = true;
-	// }	
-	// if (wakeup_cause == GM_WAKEUP_GPIO_REED_PULSE_INACTIVE || b_missed_reed)
-	// 	check_counter_increment();
 
 	if (!is_reed_wakeup_cause(wakeup_cause)) {
  		main_button_start();
 	}
 	if (!ota_new_image) {
-		//check_shall_enable_radio(wakeup_cause, b_missed_reed);
 		check_shall_enable_radio(wakeup_cause, b_missed_reed);
 	} else {
 		start_radio_and_report(true);
@@ -288,14 +283,6 @@ int main(void)
 	reed_led_off();
 #endif
 
-	// if main loop has not started we can safely sleep now
-	// if (!is_main_loop_started()) {
-	// 	LOG_INF("Powering off now: direct system_off path");
-	// 	err = poweroff();
-	// 	if (err != 0) {
-	// 		sys_reboot(SYS_REBOOT_COLD);
-	// 	}
-	// }
 	if (is_main_loop_started()) {
 		/*
 		* Runtime path: restore normal reed interrupts only
@@ -317,7 +304,7 @@ int main(void)
 			return err;
 		}
 
-		LOG_INF("Powering off now: direct system_off path");
+		LOG_DBG("Powering off now: direct system_off path");
 
 		err = poweroff();
 		if (err != 0) {

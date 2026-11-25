@@ -1,18 +1,50 @@
 /*
+ * MCUboot Devicetree overlay for XIAO nRF52840.
+ *
+ * Keep the flash partition layout identical to the application.
+ * MCUboot itself must execute from boot_partition.
+ */
+
+/ {
+    chosen {
+        zephyr,code-partition = &boot_partition;
+    };
+};
+
+/*
+ * The board's default slot1 starts at 0x82000.
+ * Our application uses 0x80000 instead.
+ */
 /delete-node/ &slot1_partition;
 
-&p25q16h {
-    status = "okay";
+/* Application primary slot: 464 KB. */
+&slot0_partition {
+    reg = <0x0000C000 DT_SIZE_K(464)>;
+};
 
+/* Application NVS storage: 20 KB. */
+&storage_partition {
+    reg = <0x000F8000 DT_SIZE_K(20)>;
+};
+
+&flash0 {
     partitions {
-        compatible = "fixed-partitions";
-        #address-cells = <1>;
-        #size-cells = <1>;
-
-        slot1_partition: partition@0 {
+        slot1_partition: partition@80000 {
+            compatible = "zephyr,mapped-partition";
             label = "image-1";
-            reg = <0x00000000 DT_SIZE_K(908)>;
+            reg = <0x00080000 DT_SIZE_K(464)>;
+        };
+
+        zboss_nvram: partition@fd000 {
+            compatible = "zephyr,mapped-partition";
+            label = "zboss-nvram";
+            reg = <0x000FD000 DT_SIZE_K(8)>;
+        };
+
+        zboss_product_config: partition@ff000 {
+            compatible = "zephyr,mapped-partition";
+            label = "zboss-product-config";
+            reg = <0x000FF000 DT_SIZE_K(4)>;
         };
     };
 };
- */

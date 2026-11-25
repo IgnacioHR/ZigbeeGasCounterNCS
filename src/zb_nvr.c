@@ -61,7 +61,7 @@ static void nvr_work_handler(struct k_work *work)
 			set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
 			set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
 		} else {
-			LOG_INF("Counter value stored %llu", to_save_count);
+			LOG_DBG("Counter value stored %llu", to_save_count);
 		}
 #ifdef CONFIG_DEBUG
 		reed_led_off();
@@ -76,7 +76,7 @@ static void nvr_work_handler(struct k_work *work)
 				set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
 				set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
 			} else {
-				LOG_INF("Battery time stored %d", to_save_time);
+				LOG_DBG("Battery time stored %d", to_save_time);
 			}
 		}
 	}
@@ -89,7 +89,7 @@ static void nvr_work_handler(struct k_work *work)
 			set_device_extended_status_bit(ZB_ZCL_METERING_NV_MEMORY_ERROR);
 			set_device_status_bit(ZB_ZCL_METERING_GAS_CHECK_METER);
 		} else {
-			LOG_INF("Counter offset value stored %llu", to_save_count);
+			LOG_DBG("Counter offset value stored %llu", to_save_count);
 		}
 #ifdef CONFIG_DEBUG
 		reed_led_off();
@@ -119,7 +119,7 @@ static int offset_set_from_u64(uint64_t value)
 	};
 	set_init_offset_summ(z_value);
 
-	LOG_INF("Counter offset value set to %lld",value);
+	LOG_DBG("Counter offset value set to %lld",value);
 	return 0;
 }
 #endif
@@ -132,7 +132,7 @@ static int counter_set_from_u64(uint64_t value)
 	};
 	set_init_current_summ(z_value);
 
-	LOG_INF("Counter value set to %lld",value);
+	LOG_DBG("Counter value set to %lld",value);
 	return 0;
 }
 
@@ -140,7 +140,7 @@ static int time_set_from_u32(uint32_t value)
 {
 	set_init_old_time(value);
 
-	LOG_INF("Time value set to %d",value);
+	LOG_DBG("Time value set to %d",value);
 	return 0;
 }
 
@@ -266,6 +266,7 @@ static int load_current_summ_from_nvr(void)
 	if (!found) {
 		LOG_INF("Counter not found in memory so starting from 0");
 		counter_set_from_u64(0);
+		nvr_schedule_save(NVR_ITEM_COUNTER);
 	}
 
 	return 0;
@@ -304,8 +305,9 @@ static int load_offset_from_nvr(void)
 	}
 
 	if (!found) {
-		LOG_INF("Counter offset not found in memory so starting from 0");
+		LOG_INF("Counter offset not found in memory or its value is invalid, setting to 0");
 		offset_set_from_u64(0);
+		nvr_schedule_save(NVR_ITEM_COUNTER_OFFSET);
 	}
 
 	return 0;
@@ -330,9 +332,6 @@ static void nvr_init(void)
 	}
 	
 	k_work_init_delayable(&nvr_work, nvr_work_handler);
-#if IS_ENABLED(CONFIG_LOG)
-	log_filter_set(NULL, 0, log_source_id_get("fs_nvs"), LOG_LEVEL_WRN);
-#endif
 
 	int result = 0;
 	
